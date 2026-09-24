@@ -1,76 +1,1680 @@
-/* =========================================================
-   MULTIMODAL FILE PREVIEW
-   ========================================================= */
+import React, { useEffect, useState } from "react";
 
-.selected-file {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+const BACKEND_URL = "http://127.0.0.1:8000";
 
-  margin-top: 12px;
-  padding: 12px 14px;
+const LANGUAGES = [
+  { code: "en", name: "English" },
+  { code: "ta", name: "தமிழ்" },
+  { code: "hi", name: "हिन्दी" },
+  { code: "te", name: "తెలుగు" },
+  { code: "ml", name: "മലയാളം" },
+  { code: "kn", name: "ಕನ್ನಡ" },
+  { code: "bn", name: "বাংলা" },
+  { code: "fr", name: "Français" },
+  { code: "es", name: "Español" },
+  { code: "de", name: "Deutsch" },
+  { code: "ja", name: "日本語" },
+];
 
-  border: 1px solid #214238;
+export default function App() {
+  const [activeTab, setActiveTab] = useState("overview");
 
-  background: rgba(32, 215, 181, 0.035);
+  const [audit, setAudit] = useState(null);
+  const [transactions, setTransactions] = useState([]);
+
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [dragging, setDragging] = useState(false);
+
+  const [language, setLanguage] = useState("en");
+
+  const [saasCut, setSaasCut] = useState(15);
+  const [contractorCut, setContractorCut] = useState(10);
+
+  const [simulation, setSimulation] = useState(null);
+
+  const [plan, setPlan] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const [error, setError] = useState("");
+
+  /* =====================================================
+     LOAD INITIAL DATA
+  ===================================================== */
+
+  useEffect(() => {
+    loadDashboard();
+  }, []);
+
+  const loadDashboard = async () => {
+    try {
+      setError("");
+
+      const auditResponse = await fetch(
+        `${BACKEND_URL}/api/audit`
+      );
+
+      if (!auditResponse.ok) {
+        throw new Error("Unable to connect to backend");
+      }
+
+      const auditData = await auditResponse.json();
+
+      setAudit(auditData);
+
+      const transactionResponse = await fetch(
+        `${BACKEND_URL}/api/transactions`
+      );
+
+      if (transactionResponse.ok) {
+        const transactionData =
+          await transactionResponse.json();
+
+        setTransactions(transactionData);
+      }
+
+      runWhatIf(15, 10);
+    } catch (err) {
+      console.error(err);
+
+      setError(
+        "Backend is not connected. Start FastAPI on port 8000."
+      );
+    }
+  };
+
+  /* =====================================================
+     NAVIGATION
+  ===================================================== */
+
+  const navigate = (section) => {
+    setActiveTab(section);
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  };
+
+  /* =====================================================
+     FILE UPLOAD
+  ===================================================== */
+
+  const handleFile = (file) => {
+    if (!file) return;
+
+    const allowedTypes = [
+      "text/csv",
+      "application/vnd.ms-excel",
+      "image/png",
+      "image/jpeg",
+      "image/jpg",
+      "audio/mpeg",
+      "audio/wav",
+      "audio/x-wav",
+      "audio/mp3",
+    ];
+
+    const extension =
+      file.name.split(".").pop().toLowerCase();
+
+    const allowedExtensions = [
+      "csv",
+      "png",
+      "jpg",
+      "jpeg",
+      "mp3",
+      "wav",
+    ];
+
+    if (
+      !allowedTypes.includes(file.type) &&
+      !allowedExtensions.includes(extension)
+    ) {
+      setError(
+        "Please upload CSV, JPG, PNG, MP3 or WAV files."
+      );
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      setError("Maximum file size is 10 MB.");
+      return;
+    }
+
+    setError("");
+    setSelectedFile(file);
+  };
+
+  const handleFileInput = (event) => {
+    const file = event.target.files?.[0];
+
+    handleFile(file);
+  };
+
+  const handleDrop = (event) => {
+    event.preventDefault();
+
+    setDragging(false);
+
+    const file = event.dataTransfer.files?.[0];
+
+    handleFile(file);
+  };
+
+  /* =====================================================
+     UPLOAD TO BACKEND
+  ===================================================== */
+
+  const uploadFile = async () => {
+    if (!selectedFile) {
+      setError("Please select a file first.");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+
+    try {
+      const formData = new FormData();
+
+      formData.append("file", selectedFile);
+
+      const response = await fetch(
+        `${BACKEND_URL}/api/upload`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.detail || "Upload failed"
+        );
+      }
+
+      setAudit(data.audit);
+
+      if (data.transactions) {
+        setTransactions(data.transactions);
+      }
+
+      setSelectedFile(null);
+
+      runWhatIf(15, 10);
+
+      navigate("overview");
+    } catch (err) {
+      console.error(err);
+
+      setError(
+        err.message ||
+          "Unable to process uploaded file."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /* =====================================================
+     WHAT IF
+  ===================================================== */
+
+  const runWhatIf = async (
+    saasValue,
+    contractorValue
+  ) => {
+    try {
+      const response = await fetch(
+        `${BACKEND_URL}/api/what-if`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            saas_reduction_pct:
+              Number(saasValue),
+
+            contractor_reduction_pct:
+              Number(contractorValue),
+          }),
+        }
+      );
+
+      if (!response.ok) return;
+
+      const data = await response.json();
+
+      setSimulation(data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const changeSaas = (value) => {
+    setSaasCut(Number(value));
+
+    runWhatIf(
+      Number(value),
+      contractorCut
+    );
+  };
+
+  const changeContractor = (value) => {
+    setContractorCut(Number(value));
+
+    runWhatIf(
+      saasCut,
+      Number(value)
+    );
+  };
+
+  /* =====================================================
+     AI ADVICE
+  ===================================================== */
+
+  const generateAdvice = async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const response = await fetch(
+        `${BACKEND_URL}/api/generate-plan`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            api_key: null,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.detail || "Unable to generate advice"
+        );
+      }
+
+      setPlan(data.plan || "");
+
+      navigate("advisor");
+    } catch (err) {
+      console.error(err);
+
+      setError(
+        err.message ||
+          "AI advice generation failed."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /* =====================================================
+     HELPERS
+  ===================================================== */
+
+  const money = (value) => {
+    return `$${Number(value || 0).toLocaleString(
+      "en-US",
+      {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }
+    )}`;
+  };
+
+  const fileIcon = () => {
+    if (!selectedFile) return "↑";
+
+    const extension =
+      selectedFile.name
+        .split(".")
+        .pop()
+        .toLowerCase();
+
+    if (
+      extension === "jpg" ||
+      extension === "jpeg" ||
+      extension === "png"
+    ) {
+      return "🖼";
+    }
+
+    if (
+      extension === "mp3" ||
+      extension === "wav"
+    ) {
+      return "♫";
+    }
+
+    return "CSV";
+  };
+
+  /* =====================================================
+     TRANSLATION LABELS
+  ===================================================== */
+
+  const text = {
+    en: {
+      overview: "Overview",
+      transactions: "Transactions",
+      cashflow: "Cash Flow",
+      advisor: "AI Advisor",
+      whatif: "What-If",
+      command: "Business Command Center",
+      import: "Import Your Business Ledger",
+      analyze: "Analyze Data →",
+      demo: "Use Demo Data",
+      inflow: "Inflow",
+      outflow: "Outflow",
+      net: "Net",
+      risk: "Risk",
+    },
+
+    ta: {
+      overview: "மேலோட்டம்",
+      transactions: "பரிவர்த்தனைகள்",
+      cashflow: "பணப்புழக்கம்",
+      advisor: "AI ஆலோசகர்",
+      whatif: "என்ன-ஆகும்",
+      command: "வணிக கட்டுப்பாட்டு மையம்",
+      import: "வணிக தரவை பதிவேற்றவும்",
+      analyze: "தரவை பகுப்பாய்வு செய் →",
+      demo: "Demo தரவு",
+      inflow: "வரவு",
+      outflow: "செலவு",
+      net: "நிகர",
+      risk: "ஆபத்து",
+    },
+
+    hi: {
+      overview: "अवलोकन",
+      transactions: "लेन-देन",
+      cashflow: "कैश फ्लो",
+      advisor: "AI सलाहकार",
+      whatif: "क्या-अगर",
+      command: "बिजनेस कमांड सेंटर",
+      import: "बिजनेस डेटा अपलोड करें",
+      analyze: "डेटा विश्लेषण →",
+      demo: "डेमो डेटा",
+      inflow: "आमदनी",
+      outflow: "खर्च",
+      net: "नेट",
+      risk: "जोखिम",
+    },
+  };
+
+  const currentText =
+    text[language] || text.en;
+
+  /* =====================================================
+     SIDEBAR
+  ===================================================== */
+
+  const Sidebar = () => (
+    <aside className="sidebar">
+
+      <div className="brand">
+
+        <div className="brand-mark">
+          W
+        </div>
+
+        <div>
+          <div className="brand-name">
+            WealthBridge
+          </div>
+
+          <div className="brand-sub">
+            SME FINANCIAL AI
+          </div>
+        </div>
+
+      </div>
+
+      <div className="online-status">
+
+        <span className="online-dot"></span>
+
+        AI ENGINE ONLINE
+
+      </div>
+
+      <nav className="side-nav">
+
+        <button
+          className={`nav-item ${
+            activeTab === "overview"
+              ? "active"
+              : ""
+          }`}
+          onClick={() =>
+            navigate("overview")
+          }
+        >
+          <span>◈</span>
+
+          {currentText.overview}
+        </button>
+
+        <button
+          className={`nav-item ${
+            activeTab === "transactions"
+              ? "active"
+              : ""
+          }`}
+          onClick={() =>
+            navigate("transactions")
+          }
+        >
+          <span>◫</span>
+
+          {currentText.transactions}
+        </button>
+
+        <button
+          className={`nav-item ${
+            activeTab === "cashflow"
+              ? "active"
+              : ""
+          }`}
+          onClick={() =>
+            navigate("cashflow")
+          }
+        >
+          <span>◉</span>
+
+          {currentText.cashflow}
+        </button>
+
+        <button
+          className={`nav-item ${
+            activeTab === "advisor"
+              ? "active"
+              : ""
+          }`}
+          onClick={() =>
+            navigate("advisor")
+          }
+        >
+          <span>◇</span>
+
+          {currentText.advisor}
+        </button>
+
+        <button
+          className={`nav-item ${
+            activeTab === "whatif"
+              ? "active"
+              : ""
+          }`}
+          onClick={() =>
+            navigate("whatif")
+          }
+        >
+          <span>◎</span>
+
+          {currentText.whatif}
+        </button>
+
+      </nav>
+
+      <div className="sidebar-footer">
+
+        <div className="language-title">
+          Language
+        </div>
+
+        <select
+          className="language-select"
+          value={language}
+          onChange={(e) =>
+            setLanguage(e.target.value)
+          }
+        >
+
+          {LANGUAGES.map((item) => (
+            <option
+              key={item.code}
+              value={item.code}
+            >
+              {item.name}
+            </option>
+          ))}
+
+        </select>
+
+        <div className="security">
+          🔒 Secure local analysis
+        </div>
+
+      </div>
+
+    </aside>
+  );
+
+  /* =====================================================
+     OVERVIEW
+  ===================================================== */
+
+  const Overview = () => (
+    <>
+
+      <div className="topbar">
+
+        <div>
+          <div className="eyebrow">
+            FINANCIAL INTELLIGENCE
+          </div>
+
+          <h1>
+            {currentText.command}
+          </h1>
+        </div>
+
+        <div className="top-status">
+          <span className="pulse"></span>
+          AI ONLINE
+        </div>
+
+      </div>
+
+      {error && (
+        <div className="error-banner">
+          ⚠
+
+          <span>{error}</span>
+
+          <button
+            onClick={() =>
+              setError("")
+            }
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      <section className="upload-card">
+
+        <div>
+
+          <div className="section-tag">
+            DATA INGESTION
+          </div>
+
+          <h2>
+            ↑ {currentText.import}
+          </h2>
+
+          <p>
+            Upload your business data and
+            WealthBridge will audit it and
+            build your financial command center.
+          </p>
+
+          <div
+            className={`drop-zone ${
+              dragging ? "dragging" : ""
+            }`}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragging(true);
+            }}
+            onDragLeave={() =>
+              setDragging(false)
+            }
+            onDrop={handleDrop}
+          >
+
+            <div className="upload-icon">
+              {fileIcon()}
+            </div>
+
+            <div className="drop-title">
+              {selectedFile
+                ? selectedFile.name
+                : "Drop your file here"}
+            </div>
+
+            <div className="drop-sub">
+              CSV • JPG • PNG • MP3 • WAV
+              • Maximum 10 MB
+            </div>
+
+            <label className="browse-button">
+
+              Browse Files
+
+              <input
+                type="file"
+                hidden
+                accept=".csv,.jpg,.jpeg,.png,.mp3,.wav"
+                onChange={handleFileInput}
+              />
+
+            </label>
+
+          </div>
+
+          {selectedFile && (
+            <div className="selected-file">
+
+              <div className="selected-file-icon">
+                {fileIcon()}
+              </div>
+
+              <div className="selected-file-details">
+
+                <strong>
+                  {selectedFile.name}
+                </strong>
+
+                <small>
+                  {(
+                    selectedFile.size /
+                    1024
+                  ).toFixed(1)} KB
+                </small>
+
+              </div>
+
+              <button
+                className="remove-file"
+                onClick={() =>
+                  setSelectedFile(null)
+                }
+              >
+                ×
+              </button>
+
+            </div>
+          )}
+
+          <div className="upload-actions">
+
+            <button
+              className="primary-button"
+              onClick={uploadFile}
+              disabled={
+                !selectedFile || loading
+              }
+            >
+              {loading
+                ? "ANALYZING..."
+                : currentText.analyze}
+            </button>
+
+            <button
+              className="secondary-button"
+              onClick={loadDashboard}
+            >
+              {currentText.demo}
+            </button>
+
+          </div>
+
+        </div>
+
+        <div className="upload-preview">
+
+          <div>
+
+            <div className="preview-title">
+              LEDGER PIPELINE
+            </div>
+
+            <div className="pipeline">
+
+              <div className="pipeline-step">
+                <span>01</span>
+                <strong>IMPORT</strong>
+                <small>
+                  CSV / Image / Audio
+                </small>
+              </div>
+
+              <div className="pipeline-line"></div>
+
+              <div className="pipeline-step">
+                <span>02</span>
+                <strong>AUDIT</strong>
+                <small>
+                  Patterns
+                </small>
+              </div>
+
+              <div className="pipeline-line"></div>
+
+              <div className="pipeline-step">
+                <span>03</span>
+                <strong>ADVISE</strong>
+                <small>
+                  AI insights
+                </small>
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      </section>
+
+      <DashboardCards />
+
+      <div className="analysis-grid">
+
+        <Anomalies />
+
+        <Recurring />
+
+      </div>
+
+      <FinanceLab />
+
+      <AdvisorPreview />
+
+    </>
+  );
+
+  /* =====================================================
+     DASHBOARD CARDS
+  ===================================================== */
+
+  const DashboardCards = () => {
+
+    if (!audit) return null;
+
+    return (
+      <div className="kpi-grid">
+
+        <div className="kpi-card">
+
+          <div className="kpi-label">
+            ↑ {currentText.inflow}
+          </div>
+
+          <div className="kpi-value">
+            {money(audit.total_inflow)}
+          </div>
+
+          <div className="kpi-meta">
+            Recorded revenue
+          </div>
+
+        </div>
+
+        <div className="kpi-card">
+
+          <div className="kpi-label">
+            ↓ {currentText.outflow}
+          </div>
+
+          <div className="kpi-value">
+            {money(audit.total_outflow)}
+          </div>
+
+          <div className="kpi-meta">
+            Operational spending
+          </div>
+
+        </div>
+
+        <div className="kpi-card highlight">
+
+          <div className="kpi-label">
+            ◆ {currentText.net}
+          </div>
+
+          <div className="kpi-value">
+            {money(audit.net_cash_flow)}
+          </div>
+
+          <div className="kpi-meta">
+            Cash position
+          </div>
+
+        </div>
+
+        <div className="kpi-card">
+
+          <div className="kpi-label">
+            ! {currentText.risk}
+          </div>
+
+          <div
+            className={`risk-value ${
+              audit.revenue_volatility
+                ?.toLowerCase()
+                .includes("high")
+                ? "risk-high"
+                : "risk-low"
+            }`}
+          >
+            {audit.revenue_volatility
+              ?.toLowerCase()
+              .includes("high")
+              ? "HIGH"
+              : "STABLE"}
+          </div>
+
+          <div className="kpi-meta">
+            Revenue volatility
+          </div>
+
+        </div>
+
+      </div>
+    );
+  };
+
+  /* =====================================================
+     ANOMALIES
+  ===================================================== */
+
+  const Anomalies = () => (
+    <section className="panel">
+
+      <div className="panel-header">
+
+        <div>
+
+          <div className="panel-kicker">
+            AUDIT SIGNALS
+          </div>
+
+          <h3>
+            Spending Anomalies
+          </h3>
+
+        </div>
+
+        <div className="count-badge">
+          {audit?.anomalies?.length || 0}
+        </div>
+
+      </div>
+
+      <div className="anomaly-list">
+
+        {audit?.anomalies?.length ? (
+          audit.anomalies
+            .slice(0, 6)
+            .map((item, index) => (
+              <div
+                className="anomaly-item"
+                key={
+                  item.tx_id || index
+                }
+              >
+
+                <div className="warning-icon">
+                  !
+                </div>
+
+                <div className="anomaly-main">
+
+                  <strong>
+                    {item.merchant}
+                  </strong>
+
+                  <span>
+                    {item.tx_id}
+                  </span>
+
+                </div>
+
+                <div className="anomaly-amount">
+                  {money(item.amount)}
+                </div>
+
+              </div>
+            ))
+        ) : (
+          <div className="empty-state">
+            No anomalies detected.
+          </div>
+        )}
+
+      </div>
+
+    </section>
+  );
+
+  /* =====================================================
+     RECURRING
+  ===================================================== */
+
+  const Recurring = () => (
+    <section className="panel">
+
+      <div className="panel-header">
+
+        <div>
+
+          <div className="panel-kicker">
+            FIXED COMMITMENTS
+          </div>
+
+          <h3>
+            Recurring Costs
+          </h3>
+
+        </div>
+
+        <div className="count-badge">
+          {audit?.recurring_charges
+            ?.length || 0}
+        </div>
+
+      </div>
+
+      <div className="recurring-list">
+
+        {audit?.recurring_charges?.length ? (
+          audit.recurring_charges
+            .slice(0, 6)
+            .map((item, index) => (
+              <div
+                className="recurring-item"
+                key={
+                  item.merchant || index
+                }
+              >
+
+                <div className="merchant-icon">
+                  $
+                </div>
+
+                <div className="recurring-main">
+
+                  <strong>
+                    {item.merchant}
+                  </strong>
+
+                  <span>
+                    {item.category}
+                  </span>
+
+                </div>
+
+                <div className="recurring-price">
+
+                  {money(
+                    item.monthly_avg
+                  )}
+
+                  <small>
+                    /mo
+                  </small>
+
+                </div>
+
+              </div>
+            ))
+        ) : (
+          <div className="empty-state">
+            No recurring charges detected.
+          </div>
+        )}
+
+      </div>
+
+    </section>
+  );
+
+  /* =====================================================
+     FINANCE LAB
+  ===================================================== */
+
+  const FinanceLab = () => (
+    <section className="finance-lab">
+
+      <div className="lab-heading">
+
+        <div>
+
+          <div className="section-tag">
+            SCENARIO ENGINE
+          </div>
+
+          <h2>
+            What-If Finance Lab
+          </h2>
+
+          <p>
+            Test expense reductions before
+            making a decision.
+          </p>
+
+        </div>
+
+        <div className="simulation-result">
+
+          <span>
+            PROJECTED SAVINGS
+          </span>
+
+          <strong>
+            {money(
+              simulation?.projected_savings
+            )}
+          </strong>
+
+        </div>
+
+      </div>
+
+      <div className="sliders">
+
+        <div className="slider-row">
+
+          <div className="slider-info">
+
+            <span>
+              SaaS Reduction
+            </span>
+
+            <strong>
+              {saasCut}%
+            </strong>
+
+          </div>
+
+          <input
+            type="range"
+            min="0"
+            max="50"
+            value={saasCut}
+            onChange={(e) =>
+              changeSaas(
+                e.target.value
+              )
+            }
+          />
+
+        </div>
+
+        <div className="slider-row">
+
+          <div className="slider-info">
+
+            <span>
+              Contractor Reduction
+            </span>
+
+            <strong>
+              {contractorCut}%
+            </strong>
+
+          </div>
+
+          <input
+            type="range"
+            min="0"
+            max="50"
+            value={contractorCut}
+            onChange={(e) =>
+              changeContractor(
+                e.target.value
+              )
+            }
+          />
+
+        </div>
+
+      </div>
+
+      <div className="scenario-bottom">
+
+        <div className="scenario-stat">
+
+          <span>
+            CURRENT NET
+          </span>
+
+          <strong>
+            {money(
+              simulation?.original_net ||
+                audit?.net_cash_flow
+            )}
+          </strong>
+
+        </div>
+
+        <div className="scenario-arrow">
+          →
+        </div>
+
+        <div className="scenario-stat positive">
+
+          <span>
+            ADJUSTED NET
+          </span>
+
+          <strong>
+            {money(
+              simulation?.adjusted_net
+            )}
+          </strong>
+
+        </div>
+
+      </div>
+
+    </section>
+  );
+
+  /* =====================================================
+     ADVISOR PREVIEW
+  ===================================================== */
+
+  const AdvisorPreview = () => (
+    <section className="advisor-panel">
+
+      <div className="advisor-header">
+
+        <div>
+
+          <div className="advisor-symbol">
+            ✦
+          </div>
+
+          <div className="section-tag">
+            INTELLIGENCE LAYER
+          </div>
+
+          <h2>
+            AI Advisor
+          </h2>
+
+          <p>
+            Grounded financial recommendations
+            generated from your ledger.
+          </p>
+
+        </div>
+
+        <button
+          className="generate-button"
+          onClick={generateAdvice}
+          disabled={loading}
+        >
+          {loading
+            ? "GENERATING..."
+            : "GENERATE ADVICE →"}
+        </button>
+
+      </div>
+
+      {plan && (
+        <div className="advice-box">
+
+          <div className="advice-language">
+            AI REPORT
+          </div>
+
+          <div className="advice-text">
+            {plan}
+          </div>
+
+        </div>
+      )}
+
+    </section>
+  );
+
+  /* =====================================================
+     TRANSACTIONS PAGE
+  ===================================================== */
+
+  const TransactionsPage = () => (
+    <>
+
+      <div className="topbar">
+
+        <div>
+
+          <div className="eyebrow">
+            LEDGER DATA
+          </div>
+
+          <h1>
+            Transactions
+          </h1>
+
+        </div>
+
+        <div className="top-status">
+          {transactions.length} RECORDS
+        </div>
+
+      </div>
+
+      <section className="panel">
+
+        <div className="panel-header">
+
+          <div>
+            <div className="panel-kicker">
+              TRANSACTION LEDGER
+            </div>
+
+            <h3>
+              Business Transactions
+            </h3>
+          </div>
+
+        </div>
+
+        <div
+          style={{
+            overflowX: "auto",
+            padding: "10px 20px 25px",
+          }}
+        >
+
+          <table
+            style={{
+              width: "100%",
+              borderCollapse: "collapse",
+              fontSize: "9px",
+            }}
+          >
+
+            <thead>
+
+              <tr>
+
+                <th style={thStyle}>
+                  ID
+                </th>
+
+                <th style={thStyle}>
+                  DATE
+                </th>
+
+                <th style={thStyle}>
+                  MERCHANT
+                </th>
+
+                <th style={thStyle}>
+                  CATEGORY
+                </th>
+
+                <th style={thStyle}>
+                  AMOUNT
+                </th>
+
+              </tr>
+
+            </thead>
+
+            <tbody>
+
+              {transactions
+                .slice(0, 100)
+                .map((tx, index) => (
+
+                  <tr
+                    key={
+                      tx.tx_id || index
+                    }
+                  >
+
+                    <td style={tdStyle}>
+                      {tx.tx_id}
+                    </td>
+
+                    <td style={tdStyle}>
+                      {tx.date}
+                    </td>
+
+                    <td style={tdStyle}>
+                      {tx.merchant}
+                    </td>
+
+                    <td style={tdStyle}>
+                      {tx.category}
+                    </td>
+
+                    <td
+                      style={{
+                        ...tdStyle,
+                        color:
+                          Number(
+                            tx.amount
+                          ) >= 0
+                            ? "#2bd9b6"
+                            : "#ff7886",
+                      }}
+                    >
+                      {money(tx.amount)}
+                    </td>
+
+                  </tr>
+
+                ))}
+
+            </tbody>
+
+          </table>
+
+        </div>
+
+      </section>
+
+    </>
+  );
+
+  /* =====================================================
+     CASH FLOW PAGE
+  ===================================================== */
+
+  const CashFlowPage = () => (
+    <>
+
+      <div className="topbar">
+
+        <div>
+
+          <div className="eyebrow">
+            CASH MANAGEMENT
+          </div>
+
+          <h1>
+            Cash Flow
+          </h1>
+
+        </div>
+
+        <div className="top-status">
+          LIVE ANALYSIS
+        </div>
+
+      </div>
+
+      <DashboardCards />
+
+      <section className="panel" style={{ marginTop: 14 }}>
+
+        <div className="panel-header">
+
+          <div>
+
+            <div className="panel-kicker">
+              CASH FLOW DIAGNOSTIC
+            </div>
+
+            <h3>
+              Revenue & Spending Overview
+            </h3>
+
+          </div>
+
+        </div>
+
+        <div style={{ padding: 25 }}>
+
+          <p style={descriptionStyle}>
+            Total recorded inflow is{" "}
+            <strong>
+              {money(
+                audit?.total_inflow
+              )}
+            </strong>
+            , while recorded outflow is{" "}
+            <strong>
+              {money(
+                audit?.total_outflow
+              )}
+            .
+          </p>
+
+          <p
+            style={{
+              ...descriptionStyle,
+              marginTop: 15,
+            }}
+          >
+            Current net cash flow is{" "}
+            <strong>
+              {money(
+                audit?.net_cash_flow
+              )}
+            }.
+          </p>
+
+          <p
+            style={{
+              ...descriptionStyle,
+              marginTop: 15,
+            }}
+          >
+            Revenue pattern:{" "}
+            <strong>
+              {audit?.revenue_volatility}
+            </strong>
+          </p>
+
+        </div>
+
+      </section>
+
+    </>
+  );
+
+  /* =====================================================
+     WHAT IF PAGE
+  ===================================================== */
+
+  const WhatIfPage = () => (
+    <>
+
+      <div className="topbar">
+
+        <div>
+
+          <div className="eyebrow">
+            SCENARIO ENGINE
+          </div>
+
+          <h1>
+            What-If Finance Lab
+          </h1>
+
+        </div>
+
+      </div>
+
+      <FinanceLab />
+
+    </>
+  );
+
+  /* =====================================================
+     ADVISOR PAGE
+  ===================================================== */
+
+  const AdvisorPage = () => (
+    <>
+
+      <div className="topbar">
+
+        <div>
+
+          <div className="eyebrow">
+            INTELLIGENCE LAYER
+          </div>
+
+          <h1>
+            AI Financial Advisor
+          </h1>
+
+        </div>
+
+        <div className="top-status">
+          AI ENGINE ONLINE
+        </div>
+
+      </div>
+
+      <section className="advisor-panel">
+
+        <div className="advisor-header">
+
+          <div>
+
+            <div className="advisor-symbol">
+              ✦
+            </div>
+
+            <div className="section-tag">
+              GROUNDED AI
+            </div>
+
+            <h2>
+              Financial Recommendations
+            </h2>
+
+            <p>
+              Generate recommendations using
+              your uploaded financial data.
+            </p>
+
+          </div>
+
+          <button
+            className="generate-button"
+            onClick={generateAdvice}
+            disabled={loading}
+          >
+            {loading
+              ? "GENERATING..."
+              : "GENERATE ADVICE →"}
+          </button>
+
+        </div>
+
+        {plan ? (
+          <div className="advice-box">
+
+            <div className="advice-language">
+              FINANCIAL REPORT
+            </div>
+
+            <div className="advice-text">
+              {plan}
+            </div>
+
+          </div>
+        ) : (
+          <div className="advice-box">
+
+            <div className="advice-text">
+              Click "Generate Advice" to
+              create your financial report.
+            </div>
+
+          </div>
+        )}
+
+      </section>
+
+    </>
+  );
+
+  /* =====================================================
+     PAGE SWITCH
+  ===================================================== */
+
+  const renderPage = () => {
+
+    switch (activeTab) {
+
+      case "transactions":
+        return <TransactionsPage />;
+
+      case "cashflow":
+        return <CashFlowPage />;
+
+      case "advisor":
+        return <AdvisorPage />;
+
+      case "whatif":
+        return <WhatIfPage />;
+
+      case "overview":
+      default:
+        return <Overview />;
+
+    }
+
+  };
+
+  return (
+    <div className="app-shell">
+
+      <Sidebar />
+
+      <main className="main-content">
+
+        {renderPage()}
+
+        <footer className="dashboard-footer">
+
+          <span>
+            WEALTHBRIDGE / SME FINANCIAL
+            INTELLIGENCE
+          </span>
+
+          <span>
+            2026 • AI-POWERED
+            ANALYSIS
+          </span>
+
+        </footer>
+
+      </main>
+
+    </div>
+  );
 }
 
-.selected-file-icon {
-  width: 34px;
-  height: 34px;
+/* =====================================================
+   INLINE TABLE STYLES
+===================================================== */
 
-  display: flex;
-  align-items: center;
-  justify-content: center;
+const thStyle = {
+  textAlign: "left",
+  padding: "12px 8px",
+  borderBottom: "1px solid #20343b",
+  color: "#66808a",
+  fontFamily: "DM Mono, monospace",
+  fontSize: "7px",
+  letterSpacing: "1px",
+};
 
-  border: 1px solid #254d45;
+const tdStyle = {
+  padding: "12px 8px",
+  borderBottom: "1px solid #14262c",
+  color: "#a9bdc4",
+  fontFamily: "DM Mono, monospace",
+  fontSize: "8px",
+};
 
-  background: #0b1518;
-
-  font-size: 15px;
-}
-
-.selected-file-details {
-  flex: 1;
-
-  min-width: 0;
-
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.selected-file-details strong {
-  color: #dce7ef;
-
-  font-size: 10px;
-
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.selected-file-details small {
-  color: #5d7384;
-
-  font-size: 8px;
-}
-
-.remove-file {
-  width: 25px;
-  height: 25px;
-
-  border: 1px solid #343f4b;
-
-  background: transparent;
-
-  color: #778899;
-
-  font-size: 16px;
-}
-
-.remove-file:hover {
-  border-color: #ff6677;
-
-  color: #ff6677;
-}
+const descriptionStyle = {
+  color: "#718992",
+  fontSize: "11px",
+  lineHeight: 1.8,
+};

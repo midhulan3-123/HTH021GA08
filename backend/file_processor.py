@@ -27,10 +27,6 @@ def process_uploaded_file(
     file_bytes: bytes,
     filename: str
 ):
-    """
-    Detect uploaded file type and send it
-    to the correct processor.
-    """
 
     extension = Path(
         filename
@@ -52,22 +48,18 @@ def process_uploaded_file(
     # IMAGE
     if extension in IMAGE_EXTENSIONS:
 
-        result = process_image(
+        return process_image(
             file_bytes,
             filename
         )
-
-        return result
 
     # AUDIO
     if extension in AUDIO_EXTENSIONS:
 
-        result = process_audio(
+        return process_audio(
             file_bytes,
             filename
         )
-
-        return result
 
     raise ValueError(
         "Unsupported file type. "

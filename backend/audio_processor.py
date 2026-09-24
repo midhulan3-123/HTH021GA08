@@ -13,11 +13,6 @@ def process_audio(
     file_bytes: bytes,
     filename: str
 ):
-    """
-    Save uploaded financial voice recording.
-
-    Speech-to-text can be connected later.
-    """
 
     extension = Path(
         filename
@@ -29,6 +24,7 @@ def process_audio(
         )
 
     upload_dir = Path("uploads")
+
     upload_dir.mkdir(
         parents=True,
         exist_ok=True
@@ -45,6 +41,7 @@ def process_audio(
         file_path,
         "wb"
     ) as file:
+
         file.write(file_bytes)
 
     return {
@@ -53,8 +50,6 @@ def process_audio(
         "filename": filename,
         "saved_path": str(file_path),
         "message": (
-            "Audio uploaded successfully. "
-            "Speech-to-text processing can be "
-            "connected to extract transactions."
+            "Audio uploaded successfully."
         )
     }

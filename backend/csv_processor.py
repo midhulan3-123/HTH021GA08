@@ -11,12 +11,15 @@ REQUIRED_COLUMNS = [
 
 
 def process_csv(file_bytes: bytes) -> pd.DataFrame:
-    """
-    Convert uploaded CSV into the standard
-    WealthBridge transaction format.
-    """
 
-    df = pd.read_csv(io.BytesIO(file_bytes))
+    try:
+        df = pd.read_csv(
+            io.BytesIO(file_bytes)
+        )
+    except Exception as e:
+        raise ValueError(
+            f"Unable to read CSV file: {e}"
+        )
 
     # Clean column names
     df.columns = (
@@ -35,18 +38,18 @@ def process_csv(file_bytes: bytes) -> pd.DataFrame:
 
     if missing:
         raise ValueError(
-            "Missing CSV columns: "
+            "Missing required CSV columns: "
             + ", ".join(missing)
         )
 
-    # Transaction ID
+    # Create transaction ID if missing
     if "tx_id" not in df.columns:
         df["tx_id"] = [
             f"TX-UPLOAD-{i + 1}"
             for i in range(len(df))
         ]
 
-    # Amount
+    # Convert amount
     df["amount"] = pd.to_numeric(
         df["amount"],
         errors="coerce"
@@ -56,16 +59,7 @@ def process_csv(file_bytes: bytes) -> pd.DataFrame:
         subset=["amount"]
     )
 
-    # Transaction type
-    if "type" not in df.columns:
-        df["type"] = df["amount"].apply(
-            lambda amount:
-            "CREDIT"
-            if amount > 0
-            else "DEBIT"
-        )
-
-    # Date
+    # Convert date
     df["date"] = pd.to_datetime(
         df["date"],
         errors="coerce"
@@ -74,6 +68,31 @@ def process_csv(file_bytes: bytes) -> pd.DataFrame:
     df = df.dropna(
         subset=["date"]
     )
+
+    # Clean merchant/category
+    df["merchant"] = (
+        df["merchant"]
+        .fillna("Unknown Merchant")
+        .astype(str)
+        .str.strip()
+    )
+
+    df["category"] = (
+        df["category"]
+        .fillna("Other")
+        .astype(str)
+        .str.strip()
+    )
+
+    # Transaction type
+    if "type" not in df.columns:
+
+        df["type"] = df["amount"].apply(
+            lambda value:
+            "CREDIT"
+            if value > 0
+            else "DEBIT"
+        )
 
     return df[
         [

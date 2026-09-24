@@ -14,12 +14,6 @@ def process_image(
     file_bytes: bytes,
     filename: str
 ):
-    """
-    Save uploaded receipt/invoice image.
-
-    OCR can be connected later to extract:
-    merchant, date, amount and category.
-    """
 
     extension = Path(
         filename
@@ -31,6 +25,7 @@ def process_image(
         )
 
     upload_dir = Path("uploads")
+
     upload_dir.mkdir(
         parents=True,
         exist_ok=True
@@ -47,6 +42,7 @@ def process_image(
         file_path,
         "wb"
     ) as file:
+
         file.write(file_bytes)
 
     return {
@@ -55,8 +51,6 @@ def process_image(
         "filename": filename,
         "saved_path": str(file_path),
         "message": (
-            "Image uploaded successfully. "
-            "OCR processing can be connected "
-            "to extract transaction information."
+            "Image uploaded successfully."
         )
     }

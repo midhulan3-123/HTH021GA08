@@ -1,5 +1,4 @@
 import os
-import pandas as pd
 
 from fastapi import (
     FastAPI,
@@ -9,7 +8,9 @@ from fastapi import (
 )
 
 from fastapi.middleware.cors import CORSMiddleware
+
 from pydantic import BaseModel
+
 from typing import Optional
 
 from engine import (
@@ -18,7 +19,9 @@ from engine import (
     synthesize_advice
 )
 
-from file_processor import process_uploaded_file
+from file_processor import (
+    process_uploaded_file
+)
 
 
 # =========================================================
@@ -46,27 +49,32 @@ app.add_middleware(
 
 
 # =========================================================
-# STORAGE
+# CURRENT DATA
 # =========================================================
 
-current_df = generate_synthetic_transactions(800)
+current_df = generate_synthetic_transactions(
+    800
+)
 
 
 # =========================================================
-# REQUEST MODELS
+# MODELS
 # =========================================================
 
 class AdviceRequest(BaseModel):
+
     api_key: Optional[str] = None
 
 
 class WhatIfRequest(BaseModel):
+
     saas_reduction_pct: float
+
     contractor_reduction_pct: float
 
 
 # =========================================================
-# HEALTH CHECK
+# ROOT
 # =========================================================
 
 @app.get("/")
@@ -78,6 +86,10 @@ def root():
         "message": "Financial Advisor API is running"
     }
 
+
+# =========================================================
+# HEALTH
+# =========================================================
 
 @app.get("/api/health")
 def health():
@@ -113,7 +125,7 @@ def get_audit():
 
 
 # =========================================================
-# UPLOAD FILE
+# UPLOAD
 # =========================================================
 
 @app.post("/api/upload")
@@ -124,6 +136,7 @@ async def upload_file(
     global current_df
 
     if not file.filename:
+
         raise HTTPException(
             status_code=400,
             detail="No file selected."
@@ -157,12 +170,9 @@ async def upload_file(
             )
         )
 
-    # -----------------------------------------------------
-    # 10 MB LIMIT
-    # -----------------------------------------------------
-
     file_bytes = await file.read()
 
+    # 10 MB
     if len(file_bytes) > 10 * 1024 * 1024:
 
         raise HTTPException(
@@ -189,7 +199,9 @@ async def upload_file(
 
                 raise HTTPException(
                     status_code=400,
-                    detail="CSV contains no valid transactions."
+                    detail=(
+                        "CSV contains no valid transactions."
+                    )
                 )
 
             current_df = uploaded_df
@@ -218,9 +230,7 @@ async def upload_file(
             return {
                 "status": "success",
                 "message": (
-                    "Image uploaded successfully. "
-                    "OCR processing can be connected "
-                    "to extract transaction details."
+                    "Image uploaded successfully."
                 ),
                 "file_type": "image",
                 "filename": file.filename,
@@ -238,9 +248,7 @@ async def upload_file(
             return {
                 "status": "success",
                 "message": (
-                    "Audio uploaded successfully. "
-                    "Speech-to-text processing can "
-                    "be connected for transaction extraction."
+                    "Audio uploaded successfully."
                 ),
                 "file_type": "audio",
                 "filename": file.filename,
@@ -251,7 +259,7 @@ async def upload_file(
 
         raise HTTPException(
             status_code=400,
-            detail="Unable to process uploaded file."
+            detail="Unable to process file."
         )
 
     except HTTPException:
@@ -271,7 +279,7 @@ async def upload_file(
 
 
 # =========================================================
-# REGENERATE DEMO DATA
+# DEMO DATA
 # =========================================================
 
 @app.post("/api/regenerate")
@@ -281,14 +289,15 @@ def regenerate_data(
 
     global current_df
 
-    if rows < 10:
-        rows = 10
+    rows = max(
+        10,
+        min(rows, 10000)
+    )
 
-    if rows > 10000:
-        rows = 10000
-
-    current_df = generate_synthetic_transactions(
-        rows
+    current_df = (
+        generate_synthetic_transactions(
+            rows
+        )
     )
 
     return {
@@ -298,7 +307,7 @@ def regenerate_data(
 
 
 # =========================================================
-# AI FINANCIAL PLAN
+# AI PLAN
 # =========================================================
 
 @app.post("/api/generate-plan")
@@ -322,7 +331,7 @@ def get_plan(
 
 
 # =========================================================
-# WHAT-IF ANALYSIS
+# WHAT IF
 # =========================================================
 
 @app.post("/api/what-if")
@@ -349,11 +358,17 @@ def simulate(
     )
 
     savings = (
-        saas_total
-        * (req.saas_reduction_pct / 100.0)
+        saas_total *
+        (
+            req.saas_reduction_pct /
+            100.0
+        )
     ) + (
-        contractor_total
-        * (req.contractor_reduction_pct / 100.0)
+        contractor_total *
+        (
+            req.contractor_reduction_pct /
+            100.0
+        )
     )
 
     adjusted_net = (
@@ -377,7 +392,7 @@ def simulate(
 
 
 # =========================================================
-# RUN SERVER
+# RUN
 # =========================================================
 
 if __name__ == "__main__":

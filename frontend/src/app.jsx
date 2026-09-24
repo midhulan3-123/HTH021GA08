@@ -1,389 +1,189 @@
-import React, { useState, useEffect } from "react";
-import "./App.css";
+import React, { useEffect, useState } from "react";
+import "./index.css";
 
 const BACKEND_URL = "http://127.0.0.1:8000";
 
 const LANGUAGES = [
-  { value: "English", label: "English" },
-  { value: "Tamil", label: "தமிழ்" },
-  { value: "Hindi", label: "हिन्दी" },
-  { value: "Telugu", label: "తెలుగు" },
-  { value: "Malayalam", label: "മലയാളം" },
-  { value: "Kannada", label: "ಕನ್ನಡ" },
-  { value: "Bengali", label: "বাংলা" },
-  { value: "French", label: "Français" },
-  { value: "Spanish", label: "Español" },
-  { value: "German", label: "Deutsch" },
-  { value: "Japanese", label: "日本語" },
+  { code: "en", name: "English" },
+  { code: "ta", name: "தமிழ்" },
+  { code: "hi", name: "हिन्दी" },
+  { code: "te", name: "తెలుగు" },
+  { code: "ml", name: "മലയാളം" },
+  { code: "kn", name: "ಕನ್ನಡ" },
+  { code: "bn", name: "বাংলা" },
+  { code: "fr", name: "Français" },
+  { code: "es", name: "Español" },
+  { code: "de", name: "Deutsch" },
+  { code: "ja", name: "日本語" },
 ];
 
-const UI_TEXT = {
-  English: {
-    overview: "Overview",
-    transactions: "Transactions",
-    cashFlow: "Cash Flow",
-    advisor: "AI Advisor",
-    whatIf: "What-If",
-    commandCenter: "Business Command Center",
-    importLedger: "Import Your Business Ledger",
-    chooseCsv: "Choose CSV",
-    analyze: "Analyze Data",
+const translations = {
+  en: {
+    intelligence: "FINANCIAL INTELLIGENCE",
+    command: "Business Command Center",
+    online: "AI ONLINE",
+    ingestion: "DATA INGESTION",
+    importLedger: "Import Your Business Data",
+    description:
+      "Upload your transaction CSV, receipt images or voice recordings. WealthBridge will analyze your business data.",
+    drop: "Drop your file here",
+    browse: "Choose File",
+    formats: "CSV • JPG • PNG • WEBP • MP3 • WAV • M4A",
+    analyze: "Analyze Data →",
+    demo: "Use Demo Data",
+    pipeline: "DATA PIPELINE",
+    import: "IMPORT",
+    audit: "AUDIT",
+    advise: "ADVISE",
     inflow: "Inflow",
     outflow: "Outflow",
     net: "Net",
     risk: "Risk",
+    revenue: "Recorded revenue",
+    spending: "Operational spending",
+    cash: "Cash position",
+    volatility: "Revenue volatility",
+    signals: "AUDIT SIGNALS",
     anomalies: "Spending Anomalies",
     recurring: "Recurring Costs",
-    financeLab: "What-If Finance Lab",
+    scenario: "SCENARIO ENGINE",
+    lab: "What-If Finance Lab",
+    test: "Test expense reductions before making a decision.",
+    savings: "PROJECTED SAVINGS",
     saas: "SaaS Reduction",
     contractor: "Contractor Reduction",
-    generate: "Generate Advice",
-    online: "AI Engine Online",
-    upload: "Upload CSV",
-    noFile: "No file selected",
-    demo: "Use Demo Data",
+    current: "CURRENT NET",
+    adjusted: "ADJUSTED NET",
+    intelligence: "INTELLIGENCE LAYER",
+    advisor: "AI Advisor",
+    advisorText:
+      "Grounded financial recommendations generated from your ledger.",
+    generate: "Generate Advice →",
     language: "Language",
-    transactionsCount: "transactions",
-    analyzing: "Analyzing...",
-    loading: "Loading...",
+    secure: "🔒 Secure local analysis",
   },
 
-  Tamil: {
-    overview: "மேலோட்டம்",
-    transactions: "பரிவர்த்தனைகள்",
-    cashFlow: "பணப்புழக்கம்",
-    advisor: "AI ஆலோசகர்",
-    whatIf: "என்ன ஆகும்?",
-    commandCenter: "வணிக கட்டுப்பாட்டு மையம்",
-    importLedger: "உங்கள் வணிக Ledger-ஐ பதிவேற்றவும்",
-    chooseCsv: "CSV தேர்வு",
-    analyze: "தரவை பகுப்பாய்வு செய்",
+  ta: {
+    intelligence: "நிதி நுண்ணறிவு",
+    command: "வணிக கட்டுப்பாட்டு மையம்",
+    online: "AI இயங்குகிறது",
+    ingestion: "தரவு உள்ளீடு",
+    importLedger: "வணிக தரவை பதிவேற்றவும்",
+    description:
+      "CSV, ரசீது படங்கள் அல்லது குரல் பதிவுகளை பதிவேற்றவும். WealthBridge உங்கள் தரவை பகுப்பாய்வு செய்யும்.",
+    drop: "உங்கள் கோப்பை இங்கே விடுங்கள்",
+    browse: "கோப்பை தேர்வு செய்க",
+    formats: "CSV • JPG • PNG • WEBP • MP3 • WAV • M4A",
+    analyze: "தரவை பகுப்பாய்வு செய்க →",
+    demo: "Demo தரவை பயன்படுத்தவும்",
+    pipeline: "தரவு செயல்முறை",
+    import: "உள்ளீடு",
+    audit: "தணிக்கை",
+    advise: "ஆலோசனை",
     inflow: "வரவு",
     outflow: "செலவு",
-    net: "நிகர தொகை",
+    net: "நிகர",
     risk: "ஆபத்து",
+    revenue: "பதிவான வருவாய்",
+    spending: "செயல்பாட்டு செலவு",
+    cash: "பண நிலை",
+    volatility: "வருவாய் மாற்றம்",
+    signals: "தணிக்கை குறியீடுகள்",
     anomalies: "அசாதாரண செலவுகள்",
     recurring: "தொடர்ச்சியான செலவுகள்",
-    financeLab: "What-If நிதி ஆய்வகம்",
+    scenario: "சூழ்நிலை இயந்திரம்",
+    lab: "What-If நிதி ஆய்வகம்",
+    test: "முடிவு எடுப்பதற்கு முன் செலவு குறைப்புகளை சோதிக்கவும்.",
+    savings: "எதிர்பார்க்கப்படும் சேமிப்பு",
     saas: "SaaS குறைப்பு",
-    contractor: "Contractor குறைப்பு",
-    generate: "ஆலோசனையை உருவாக்கு",
-    online: "AI Engine இயங்குகிறது",
-    upload: "CSV பதிவேற்றம்",
-    noFile: "கோப்பு தேர்வு செய்யப்படவில்லை",
-    demo: "Demo தரவைப் பயன்படுத்து",
+    contractor: "ஒப்பந்ததாரர் குறைப்பு",
+    current: "தற்போதைய நிகர",
+    adjusted: "மாற்றியமைக்கப்பட்ட நிகர",
+    advisor: "AI நிதி ஆலோசகர்",
+    intelligence: "நுண்ணறிவு அடுக்கு",
+    advisorText:
+      "உங்கள் வணிக தரவை அடிப்படையாகக் கொண்ட நிதி பரிந்துரைகள்.",
+    generate: "ஆலோசனையை உருவாக்கு →",
     language: "மொழி",
-    transactionsCount: "பரிவர்த்தனைகள்",
-    analyzing: "பகுப்பாய்வு செய்கிறது...",
-    loading: "ஏற்றுகிறது...",
+    secure: "🔒 பாதுகாப்பான உள்ளூர் பகுப்பாய்வு",
   },
 
-  Hindi: {
-    overview: "अवलोकन",
-    transactions: "लेन-देन",
-    cashFlow: "कैश फ्लो",
-    advisor: "AI सलाहकार",
-    whatIf: "क्या होगा?",
-    commandCenter: "बिज़नेस कमांड सेंटर",
-    importLedger: "अपना बिज़नेस Ledger अपलोड करें",
-    chooseCsv: "CSV चुनें",
-    analyze: "डेटा का विश्लेषण करें",
+  hi: {
+    intelligence: "वित्तीय बुद्धिमत्ता",
+    command: "बिजनेस कमांड सेंटर",
+    online: "AI ऑनलाइन",
+    ingestion: "डेटा इनपुट",
+    importLedger: "अपना बिजनेस डेटा अपलोड करें",
+    description:
+      "CSV, रसीद की तस्वीरें या वॉइस रिकॉर्डिंग अपलोड करें। WealthBridge आपके डेटा का विश्लेषण करेगा।",
+    drop: "अपनी फाइल यहां डालें",
+    browse: "फाइल चुनें",
+    formats: "CSV • JPG • PNG • WEBP • MP3 • WAV • M4A",
+    analyze: "डेटा का विश्लेषण करें →",
+    demo: "डेमो डेटा इस्तेमाल करें",
+    pipeline: "डेटा पाइपलाइन",
+    import: "इम्पोर्ट",
+    audit: "ऑडिट",
+    advise: "सलाह",
     inflow: "आवक",
-    outflow: "जावक",
-    net: "शुद्ध",
+    outflow: "खर्च",
+    net: "नेट",
     risk: "जोखिम",
+    revenue: "रिकॉर्डेड राजस्व",
+    spending: "परिचालन खर्च",
+    cash: "कैश स्थिति",
+    volatility: "राजस्व अस्थिरता",
+    signals: "ऑडिट संकेत",
     anomalies: "असामान्य खर्च",
-    recurring: "बार-बार होने वाले खर्च",
-    financeLab: "What-If वित्त प्रयोगशाला",
+    recurring: "आवर्ती खर्च",
+    scenario: "सिनेरियो इंजन",
+    lab: "What-If वित्त लैब",
+    test: "निर्णय लेने से पहले खर्च में कमी का परीक्षण करें।",
+    savings: "अनुमानित बचत",
     saas: "SaaS कमी",
     contractor: "कॉन्ट्रैक्टर कमी",
-    generate: "सलाह तैयार करें",
-    online: "AI Engine ऑनलाइन",
-    upload: "CSV अपलोड",
-    noFile: "कोई फ़ाइल नहीं चुनी गई",
-    demo: "Demo डेटा उपयोग करें",
+    current: "वर्तमान नेट",
+    adjusted: "समायोजित नेट",
+    intelligence: "इंटेलिजेंस लेयर",
+    advisor: "AI सलाहकार",
+    advisorText:
+      "आपके डेटा से तैयार वित्तीय सुझाव।",
+    generate: "सलाह बनाएं →",
     language: "भाषा",
-    transactionsCount: "लेन-देन",
-    analyzing: "विश्लेषण हो रहा है...",
-    loading: "लोड हो रहा है...",
-  },
-
-  Telugu: {
-    overview: "అవలోకనం",
-    transactions: "లావాదేవీలు",
-    cashFlow: "క్యాష్ ఫ్లో",
-    advisor: "AI సలహాదారు",
-    whatIf: "ఏమైతే?",
-    commandCenter: "బిజినెస్ కమాండ్ సెంటర్",
-    importLedger: "మీ బిజినెస్ Ledger అప్లోడ్ చేయండి",
-    chooseCsv: "CSV ఎంచుకోండి",
-    analyze: "డేటాను విశ్లేషించండి",
-    inflow: "ఆదాయం",
-    outflow: "ఖర్చు",
-    net: "నికర",
-    risk: "ప్రమాదం",
-    anomalies: "అసాధారణ ఖర్చులు",
-    recurring: "పునరావృత ఖర్చులు",
-    financeLab: "What-If ఫైనాన్స్ ల్యాబ్",
-    saas: "SaaS తగ్గింపు",
-    contractor: "కాంట్రాక్టర్ తగ్గింపు",
-    generate: "సలహా రూపొందించండి",
-    online: "AI Engine ఆన్‌లైన్",
-    upload: "CSV అప్లోడ్",
-    noFile: "ఫైల్ ఎంచుకోలేదు",
-    demo: "Demo డేటా ఉపయోగించండి",
-    language: "భాష",
-    transactionsCount: "లావాదేవీలు",
-    analyzing: "విశ్లేషిస్తోంది...",
-    loading: "లోడ్ అవుతోంది...",
-  },
-
-  Malayalam: {
-    overview: "അവലോകനം",
-    transactions: "ഇടപാടുകൾ",
-    cashFlow: "ക്യാഷ് ഫ്ലോ",
-    advisor: "AI ഉപദേഷ്ടാവ്",
-    whatIf: "എന്തായിരുന്നെങ്കിൽ?",
-    commandCenter: "ബിസിനസ് കമാൻഡ് സെന്റർ",
-    importLedger: "നിങ്ങളുടെ ബിസിനസ് Ledger അപ്‌ലോഡ് ചെയ്യുക",
-    chooseCsv: "CSV തിരഞ്ഞെടുക്കുക",
-    analyze: "ഡാറ്റ വിശകലനം ചെയ്യുക",
-    inflow: "വരവ്",
-    outflow: "ചെലവ്",
-    net: "നെറ്റ്",
-    risk: "റിസ്ക്",
-    anomalies: "അസാധാരണ ചെലവുകൾ",
-    recurring: "ആവർത്തിച്ചുള്ള ചെലവുകൾ",
-    financeLab: "What-If ഫിനാൻസ് ലാബ്",
-    saas: "SaaS കുറവ്",
-    contractor: "Contractor കുറവ്",
-    generate: "ഉപദേശം സൃഷ്ടിക്കുക",
-    online: "AI Engine ഓൺലൈൻ",
-    upload: "CSV അപ്‌ലോഡ്",
-    noFile: "ഫയൽ തിരഞ്ഞെടുത്തിട്ടില്ല",
-    demo: "Demo ഡാറ്റ ഉപയോഗിക്കുക",
-    language: "ഭാഷ",
-    transactionsCount: "ഇടപാടുകൾ",
-    analyzing: "വിശകലനം ചെയ്യുന്നു...",
-    loading: "ലോഡ് ചെയ്യുന്നു...",
-  },
-
-  Kannada: {
-    overview: "ಅವಲೋಕನ",
-    transactions: "ವಹಿವಾಟುಗಳು",
-    cashFlow: "ನಗದು ಹರಿವು",
-    advisor: "AI ಸಲಹೆಗಾರ",
-    whatIf: "ಏನಾದರೆ?",
-    commandCenter: "ಬಿಸಿನೆಸ್ ಕಮಾಂಡ್ ಸೆಂಟರ್",
-    importLedger: "ನಿಮ್ಮ ಬಿಸಿನೆಸ್ Ledger ಅಪ್‌ಲೋಡ್ ಮಾಡಿ",
-    chooseCsv: "CSV ಆಯ್ಕೆಮಾಡಿ",
-    analyze: "ಡೇಟಾ ವಿಶ್ಲೇಷಿಸಿ",
-    inflow: "ಒಳಹರಿವು",
-    outflow: "ಹೊರಹರಿವು",
-    net: "ನಿವ್ವಳ",
-    risk: "ಅಪಾಯ",
-    anomalies: "ಅಸಾಮಾನ್ಯ ವೆಚ್ಚಗಳು",
-    recurring: "ಪುನರಾವರ್ತಿತ ವೆಚ್ಚಗಳು",
-    financeLab: "What-If ಫೈನಾನ್ಸ್ ಲ್ಯಾಬ್",
-    saas: "SaaS ಕಡಿತ",
-    contractor: "ಕಾಂಟ್ರಾಕ್ಟರ್ ಕಡಿತ",
-    generate: "ಸಲಹೆ ರಚಿಸಿ",
-    online: "AI Engine ಆನ್‌ಲೈನ್",
-    upload: "CSV ಅಪ್‌ಲೋಡ್",
-    noFile: "ಯಾವುದೇ ಫೈಲ್ ಆಯ್ಕೆ ಮಾಡಿಲ್ಲ",
-    demo: "Demo ಡೇಟಾ ಬಳಸಿ",
-    language: "ಭಾಷೆ",
-    transactionsCount: "ವಹಿವಾಟುಗಳು",
-    analyzing: "ವಿಶ್ಲೇಷಿಸಲಾಗುತ್ತಿದೆ...",
-    loading: "ಲೋಡ್ ಆಗುತ್ತಿದೆ...",
-  },
-
-  Bengali: {
-    overview: "ওভারভিউ",
-    transactions: "লেনদেন",
-    cashFlow: "ক্যাশ ফ্লো",
-    advisor: "AI উপদেষ্টা",
-    whatIf: "যদি এমন হয়?",
-    commandCenter: "বিজনেস কমান্ড সেন্টার",
-    importLedger: "আপনার ব্যবসার Ledger আপলোড করুন",
-    chooseCsv: "CSV নির্বাচন করুন",
-    analyze: "ডেটা বিশ্লেষণ করুন",
-    inflow: "আয়",
-    outflow: "ব্যয়",
-    net: "নেট",
-    risk: "ঝুঁকি",
-    anomalies: "অস্বাভাবিক খরচ",
-    recurring: "পুনরাবৃত্ত খরচ",
-    financeLab: "What-If ফাইন্যান্স ল্যাব",
-    saas: "SaaS হ্রাস",
-    contractor: "কন্ট্রাক্টর হ্রাস",
-    generate: "পরামর্শ তৈরি করুন",
-    online: "AI Engine অনলাইন",
-    upload: "CSV আপলোড",
-    noFile: "কোনো ফাইল নির্বাচন করা হয়নি",
-    demo: "Demo ডেটা ব্যবহার করুন",
-    language: "ভাষা",
-    transactionsCount: "লেনদেন",
-    analyzing: "বিশ্লেষণ করা হচ্ছে...",
-    loading: "লোড হচ্ছে...",
-  },
-
-  French: {
-    overview: "Aperçu",
-    transactions: "Transactions",
-    cashFlow: "Flux de trésorerie",
-    advisor: "Conseiller IA",
-    whatIf: "Et si ?",
-    commandCenter: "Centre de commande",
-    importLedger: "Importer votre registre",
-    chooseCsv: "Choisir CSV",
-    analyze: "Analyser les données",
-    inflow: "Entrées",
-    outflow: "Sorties",
-    net: "Net",
-    risk: "Risque",
-    anomalies: "Dépenses anormales",
-    recurring: "Coûts récurrents",
-    financeLab: "Laboratoire financier",
-    saas: "Réduction SaaS",
-    contractor: "Réduction prestataires",
-    generate: "Générer des conseils",
-    online: "Moteur IA en ligne",
-    upload: "Importer CSV",
-    noFile: "Aucun fichier sélectionné",
-    demo: "Utiliser les données Demo",
-    language: "Langue",
-    transactionsCount: "transactions",
-    analyzing: "Analyse...",
-    loading: "Chargement...",
-  },
-
-  Spanish: {
-    overview: "Resumen",
-    transactions: "Transacciones",
-    cashFlow: "Flujo de caja",
-    advisor: "Asesor IA",
-    whatIf: "¿Qué pasaría?",
-    commandCenter: "Centro de control empresarial",
-    importLedger: "Importar registro empresarial",
-    chooseCsv: "Elegir CSV",
-    analyze: "Analizar datos",
-    inflow: "Ingresos",
-    outflow: "Gastos",
-    net: "Neto",
-    risk: "Riesgo",
-    anomalies: "Gastos anómalos",
-    recurring: "Costes recurrentes",
-    financeLab: "Laboratorio financiero",
-    saas: "Reducción SaaS",
-    contractor: "Reducción contratistas",
-    generate: "Generar consejo",
-    online: "Motor IA en línea",
-    upload: "Subir CSV",
-    noFile: "Ningún archivo seleccionado",
-    demo: "Usar datos Demo",
-    language: "Idioma",
-    transactionsCount: "transacciones",
-    analyzing: "Analizando...",
-    loading: "Cargando...",
-  },
-
-  German: {
-    overview: "Übersicht",
-    transactions: "Transaktionen",
-    cashFlow: "Cashflow",
-    advisor: "KI-Berater",
-    whatIf: "Was-wäre-wenn",
-    commandCenter: "Business Command Center",
-    importLedger: "Geschäfts-Ledger importieren",
-    chooseCsv: "CSV auswählen",
-    analyze: "Daten analysieren",
-    inflow: "Einnahmen",
-    outflow: "Ausgaben",
-    net: "Netto",
-    risk: "Risiko",
-    anomalies: "Auffällige Ausgaben",
-    recurring: "Wiederkehrende Kosten",
-    financeLab: "Finanzlabor",
-    saas: "SaaS-Reduzierung",
-    contractor: "Reduzierung Auftragnehmer",
-    generate: "Beratung erstellen",
-    online: "KI-Engine online",
-    upload: "CSV hochladen",
-    noFile: "Keine Datei ausgewählt",
-    demo: "Demo-Daten verwenden",
-    language: "Sprache",
-    transactionsCount: "Transaktionen",
-    analyzing: "Analyse...",
-    loading: "Laden...",
-  },
-
-  Japanese: {
-    overview: "概要",
-    transactions: "取引",
-    cashFlow: "キャッシュフロー",
-    advisor: "AIアドバイザー",
-    whatIf: "もしも分析",
-    commandCenter: "ビジネスコマンドセンター",
-    importLedger: "ビジネス台帳をインポート",
-    chooseCsv: "CSVを選択",
-    analyze: "データを分析",
-    inflow: "収入",
-    outflow: "支出",
-    net: "純額",
-    risk: "リスク",
-    anomalies: "異常支出",
-    recurring: "継続コスト",
-    financeLab: "もしも財務ラボ",
-    saas: "SaaS削減",
-    contractor: "請負業者削減",
-    generate: "アドバイスを生成",
-    online: "AIエンジン稼働中",
-    upload: "CSVアップロード",
-    noFile: "ファイルが選択されていません",
-    demo: "デモデータを使用",
-    language: "言語",
-    transactionsCount: "取引",
-    analyzing: "分析中...",
-    loading: "読み込み中...",
+    secure: "🔒 सुरक्षित स्थानीय विश्लेषण",
   },
 };
 
-function App() {
+export default function App() {
   const [audit, setAudit] = useState(null);
-  const [transactions, setTransactions] = useState([]);
   const [plan, setPlan] = useState("");
-  const [translatedPlan, setTranslatedPlan] = useState("");
-  const [selectedLanguage, setSelectedLanguage] = useState("English");
+  const [language, setLanguage] = useState("en");
 
-  const [simulation, setSimulation] = useState(null);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [fileType, setFileType] = useState("");
+  const [dragging, setDragging] = useState(false);
+
+  const [uploading, setUploading] = useState(false);
+  const [loadingPlan, setLoadingPlan] = useState(false);
 
   const [saasCut, setSaasCut] = useState(15);
   const [contractorCut, setContractorCut] = useState(10);
-
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [dragging, setDragging] = useState(false);
-
-  const [loading, setLoading] = useState(false);
-  const [loadingAdvice, setLoadingAdvice] = useState(false);
-  const [loadingTranslation, setLoadingTranslation] = useState(false);
+  const [simulation, setSimulation] = useState(null);
 
   const [error, setError] = useState("");
 
-  const t = UI_TEXT[selectedLanguage] || UI_TEXT.English;
+  const t = translations[language] || translations.en;
 
   useEffect(() => {
-    loadInitialData();
+    loadAudit();
   }, []);
 
-  const loadInitialData = async () => {
+  const loadAudit = async () => {
     try {
-      setLoading(true);
-
       const response = await fetch(`${BACKEND_URL}/api/audit`);
 
       if (!response.ok) {
-        throw new Error("Backend is not running");
+        throw new Error("Backend is not running.");
       }
 
       const data = await response.json();
@@ -391,38 +191,66 @@ function App() {
       setAudit(data);
 
       await runWhatIf(15, 10);
-
     } catch (err) {
       console.error(err);
       setError(
         "Backend connection failed. Start FastAPI on port 8000."
       );
-    } finally {
-      setLoading(false);
     }
   };
 
-  const handleFileSelect = (file) => {
-    if (!file) return;
+  const detectFileType = (file) => {
+    const ext = file.name
+      .split(".")
+      .pop()
+      .toLowerCase();
 
-    if (!file.name.toLowerCase().endsWith(".csv")) {
-      setError("Please select a CSV file.");
-      return;
+    if (ext === "csv") return "csv";
+
+    if (
+      ["jpg", "jpeg", "png", "webp"].includes(ext)
+    ) {
+      return "image";
+    }
+
+    if (
+      ["mp3", "wav", "m4a"].includes(ext)
+    ) {
+      return "audio";
+    }
+
+    return null;
+  };
+
+  const validateFile = (file) => {
+    if (!file) return false;
+
+    const type = detectFileType(file);
+
+    if (!type) {
+      setError(
+        "Unsupported file. Use CSV, JPG, PNG, WEBP, MP3, WAV or M4A."
+      );
+      return false;
     }
 
     if (file.size > 10 * 1024 * 1024) {
-      setError("File size must be below 10 MB.");
-      return;
+      setError("Maximum file size is 10 MB.");
+      return false;
     }
 
-    setSelectedFile(file);
     setError("");
+
+    setSelectedFile(file);
+    setFileType(type);
+
+    return true;
   };
 
-  const handleFileInput = (event) => {
+  const handleFileChange = (event) => {
     const file = event.target.files?.[0];
 
-    handleFileSelect(file);
+    validateFile(file);
   };
 
   const handleDrop = (event) => {
@@ -432,32 +260,22 @@ function App() {
 
     const file = event.dataTransfer.files?.[0];
 
-    handleFileSelect(file);
+    validateFile(file);
   };
 
-  const analyzeUploadedFile = async () => {
+  const handleAnalyzeFile = async () => {
     if (!selectedFile) {
-      setError("Please select a CSV file first.");
+      setError("Please select a file first.");
       return;
     }
 
-    try {
-      setLoading(true);
-      setError("");
+    setUploading(true);
+    setError("");
 
+    try {
       const formData = new FormData();
 
       formData.append("file", selectedFile);
-
-      /*
-       IMPORTANT:
-       Your FastAPI backend needs:
-
-       POST /api/upload
-
-       with:
-       UploadFile = File(...)
-      */
 
       const response = await fetch(
         `${BACKEND_URL}/api/upload`,
@@ -467,71 +285,51 @@ function App() {
         }
       );
 
-      if (!response.ok) {
-        const text = await response.text();
+      const data = await response.json();
 
+      if (!response.ok) {
         throw new Error(
-          text || "CSV upload failed"
+          data.detail || "File analysis failed."
         );
       }
-
-      const data = await response.json();
 
       if (data.audit) {
         setAudit(data.audit);
       }
 
-      if (data.transactions) {
-        setTransactions(data.transactions);
+      if (data.message) {
+        setError("");
       }
-
-      setPlan("");
-      setTranslatedPlan("");
-
-      await runWhatIf(
-        saasCut,
-        contractorCut
-      );
-
     } catch (err) {
       console.error(err);
 
       setError(
         err.message ||
-        "Unable to analyze CSV file."
+          "Unable to analyze the uploaded file."
       );
     } finally {
-      setLoading(false);
+      setUploading(false);
     }
   };
 
-  const loadDemoData = async () => {
+  const handleDemoData = async () => {
     try {
-      setLoading(true);
       setError("");
 
       const response = await fetch(
-        `${BACKEND_URL}/api/audit`
+        `${BACKEND_URL}/api/regenerate`,
+        {
+          method: "POST",
+        }
       );
 
       if (!response.ok) {
-        throw new Error("Unable to load demo data");
+        throw new Error("Demo data failed.");
       }
 
-      const data = await response.json();
-
-      setAudit(data);
-      setSelectedFile(null);
-
-      await runWhatIf(
-        saasCut,
-        contractorCut
-      );
-
+      await loadAudit();
     } catch (err) {
       setError(err.message);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -558,41 +356,40 @@ function App() {
       );
 
       if (!response.ok) {
-        throw new Error("What-If request failed");
+        throw new Error("What-If analysis failed.");
       }
 
       const data = await response.json();
 
       setSimulation(data);
-
     } catch (err) {
       console.error(err);
     }
   };
 
-  const handleSaasChange = (value) => {
-    setSaasCut(value);
+  const changeSaas = (value) => {
+    setSaasCut(Number(value));
 
     runWhatIf(
-      value,
+      Number(value),
       contractorCut
     );
   };
 
-  const handleContractorChange = (value) => {
-    setContractorCut(value);
+  const changeContractor = (value) => {
+    setContractorCut(Number(value));
 
     runWhatIf(
       saasCut,
-      value
+      Number(value)
     );
   };
 
   const generateAdvice = async () => {
-    try {
-      setLoadingAdvice(true);
-      setError("");
+    setLoadingPlan(true);
+    setError("");
 
+    try {
       const response = await fetch(
         `${BACKEND_URL}/api/generate-plan`,
         {
@@ -606,181 +403,47 @@ function App() {
         }
       );
 
-      if (!response.ok) {
-        throw new Error(
-          "Unable to generate financial advice"
-        );
-      }
-
       const data = await response.json();
 
-      const newPlan = data.plan || "";
-
-      setPlan(newPlan);
-
-      if (selectedLanguage === "English") {
-        setTranslatedPlan(newPlan);
-      } else {
-        await translateAdvice(
-          newPlan,
-          selectedLanguage
+      if (!response.ok) {
+        throw new Error(
+          data.detail || "Could not generate advice."
         );
       }
 
+      setPlan(data.plan || "");
     } catch (err) {
       console.error(err);
 
       setError(
-        err.message ||
-        "AI advice generation failed."
+        err.message || "AI advice failed."
       );
     } finally {
-      setLoadingAdvice(false);
-    }
-  };
-
-  const translateAdvice = async (
-    text,
-    language
-  ) => {
-    if (!text) {
-      setTranslatedPlan("");
-      return;
-    }
-
-    if (language === "English") {
-      setTranslatedPlan(text);
-      return;
-    }
-
-    try {
-      setLoadingTranslation(true);
-
-      const response = await fetch(
-        `${BACKEND_URL}/api/translate`,
-        {
-          method: "POST",
-
-          headers: {
-            "Content-Type": "application/json",
-          },
-
-          body: JSON.stringify({
-            text,
-            language,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(
-          "Translation request failed"
-        );
-      }
-
-      const data = await response.json();
-
-      setTranslatedPlan(
-        data.translated_text || text
-      );
-
-    } catch (err) {
-      console.error(err);
-
-      setError(
-        "Translation failed. Showing English advice."
-      );
-
-      setTranslatedPlan(text);
-
-    } finally {
-      setLoadingTranslation(false);
-    }
-  };
-
-  const handleLanguageChange = async (
-    language
-  ) => {
-    setSelectedLanguage(language);
-
-    if (plan) {
-      await translateAdvice(
-        plan,
-        language
-      );
+      setLoadingPlan(false);
     }
   };
 
   const money = (value) => {
-    const number = Number(value || 0);
-
-    return new Intl.NumberFormat(
-      "en-US",
-      {
-        style: "currency",
-        currency: "USD",
-        maximumFractionDigits: 0,
-      }
-    ).format(number);
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 0,
+    }).format(Number(value || 0));
   };
-
-  const getRisk = () => {
-    if (!audit) return "LOW";
-
-    if (
-      audit.revenue_volatility
-        ?.toLowerCase()
-        .includes("high")
-    ) {
-      return "HIGH";
-    }
-
-    if (
-      audit.anomalies &&
-      audit.anomalies.length > 3
-    ) {
-      return "MEDIUM";
-    }
-
-    return "LOW";
-  };
-
-  const risk = getRisk();
 
   const riskClass =
-    risk === "HIGH"
+    audit?.revenue_volatility?.includes("High")
       ? "risk-high"
-      : risk === "MEDIUM"
-      ? "risk-medium"
       : "risk-low";
-
-  if (loading && !audit) {
-    return (
-      <div className="loading-screen">
-        <div className="loading-orb">
-          W
-        </div>
-
-        <h2>WealthBridge</h2>
-
-        <p>
-          {t.loading}
-        </p>
-      </div>
-    );
-  }
 
   return (
     <div className="app-shell">
 
       {/* SIDEBAR */}
-
       <aside className="sidebar">
 
         <div className="brand">
-          <div className="brand-mark">
-            W
-          </div>
+          <div className="brand-mark">W</div>
 
           <div>
             <div className="brand-name">
@@ -794,37 +457,35 @@ function App() {
         </div>
 
         <div className="online-status">
-          <span className="online-dot"></span>
-          {t.online}
+          <span className="online-dot" />
+          AI ENGINE ONLINE
         </div>
 
         <nav className="side-nav">
-
           <button className="nav-item active">
             <span>◈</span>
-            {t.overview}
+            Overview
           </button>
 
           <button className="nav-item">
             <span>◫</span>
-            {t.transactions}
+            Transactions
           </button>
 
           <button className="nav-item">
             <span>◉</span>
-            {t.cashFlow}
+            Cash Flow
           </button>
 
           <button className="nav-item">
             <span>◇</span>
-            {t.advisor}
+            AI Advisor
           </button>
 
           <button className="nav-item">
             <span>◎</span>
-            {t.whatIf}
+            What-If
           </button>
-
         </nav>
 
         <div className="sidebar-footer">
@@ -834,101 +495,83 @@ function App() {
           </div>
 
           <select
-            value={selectedLanguage}
-            onChange={(e) =>
-              handleLanguageChange(
-                e.target.value
-              )
-            }
             className="language-select"
+            value={language}
+            onChange={(e) =>
+              setLanguage(e.target.value)
+            }
           >
-            {LANGUAGES.map(
-              (language) => (
-                <option
-                  key={language.value}
-                  value={language.value}
-                >
-                  {language.label}
-                </option>
-              )
-            )}
+            {LANGUAGES.map((item) => (
+              <option
+                key={item.code}
+                value={item.code}
+              >
+                {item.name}
+              </option>
+            ))}
           </select>
 
           <div className="security">
-            🔒 Secure local analysis
+            {t.secure}
           </div>
 
         </div>
-
       </aside>
 
-      {/* MAIN */}
 
+      {/* MAIN */}
       <main className="main-content">
 
         <header className="topbar">
 
           <div>
             <div className="eyebrow">
-              FINANCIAL INTELLIGENCE
+              {t.intelligence}
             </div>
 
-            <h1>
-              {t.commandCenter}
-            </h1>
+            <h1>{t.command}</h1>
           </div>
 
           <div className="top-status">
-            <span className="pulse"></span>
-            AI ONLINE
+            <span className="pulse" />
+            {t.online}
           </div>
 
         </header>
 
+
         {error && (
           <div className="error-banner">
-            <span>⚠</span>
-
-            <span>
-              {error}
-            </span>
+            ⚠
+            <span>{error}</span>
 
             <button
-              onClick={() =>
-                setError("")
-              }
+              onClick={() => setError("")}
             >
               ×
             </button>
           </div>
         )}
 
-        {/* UPLOAD */}
 
+        {/* UPLOAD */}
         <section className="upload-card">
 
-          <div className="upload-left">
+          <div>
 
             <div className="section-tag">
-              DATA INGESTION
+              {t.ingestion}
             </div>
 
-            <h2>
-              ↑ {t.importLedger}
-            </h2>
+            <h2>{t.importLedger}</h2>
 
             <p>
-              Upload your transaction CSV.
-              WealthBridge will audit it
-              and build your financial
-              command center.
+              {t.description}
             </p>
 
             <div
               className={`drop-zone ${
-                dragging
-                  ? "dragging"
-                  : ""
+                dragging ? "dragging" : ""
               }`}
               onDragOver={(e) => {
                 e.preventDefault();
@@ -945,55 +588,100 @@ function App() {
               </div>
 
               <div className="drop-title">
-                {selectedFile
-                  ? selectedFile.name
-                  : "Drop your CSV here"}
+                {t.drop}
               </div>
 
               <div className="drop-sub">
                 or browse files
               </div>
 
-              <label className="browse-button">
-                {t.chooseCsv}
-
-                <input
-                  type="file"
-                  accept=".csv,text/csv"
-                  onChange={
-                    handleFileInput
-                  }
-                  hidden
-                />
+              <label
+                htmlFor="file-upload"
+                className="browse-button"
+              >
+                {t.browse}
               </label>
 
+              <input
+                id="file-upload"
+                type="file"
+                hidden
+                accept=".csv,.jpg,.jpeg,.png,.webp,.mp3,.wav,.m4a"
+                onChange={handleFileChange}
+              />
+
               <div className="file-info">
-                CSV • Maximum 10 MB
+                {t.formats}
+                {" • "}
+                Maximum 10 MB
               </div>
 
             </div>
+
+
+            {selectedFile && (
+              <div className="selected-file">
+
+                <div className="selected-file-icon">
+                  {fileType === "csv"
+                    ? "📊"
+                    : fileType === "image"
+                    ? "🖼️"
+                    : "🎙️"}
+                </div>
+
+                <div className="selected-file-details">
+
+                  <strong>
+                    {selectedFile.name}
+                  </strong>
+
+                  <small>
+                    {fileType.toUpperCase()}
+                    {" • "}
+                    {(
+                      selectedFile.size / 1024
+                    ).toFixed(1)}
+                    {" KB"}
+                  </small>
+
+                </div>
+
+                <button
+                  className="remove-file"
+                  onClick={() => {
+                    setSelectedFile(null);
+                    setFileType("");
+                  }}
+                >
+                  ×
+                </button>
+
+              </div>
+            )}
+
 
             <div className="upload-actions">
 
               <button
                 className="primary-button"
-                onClick={
-                  analyzeUploadedFile
-                }
                 disabled={
                   !selectedFile ||
-                  loading
+                  uploading
+                }
+                onClick={
+                  handleAnalyzeFile
                 }
               >
-                {loading
-                  ? t.analyzing
-                  : `${t.analyze} →`}
+                {uploading
+                  ? "ANALYZING..."
+                  : t.analyze}
               </button>
 
               <button
                 className="secondary-button"
                 onClick={
-                  loadDemoData
+                  handleDemoData
                 }
               >
                 {t.demo}
@@ -1003,153 +691,172 @@ function App() {
 
           </div>
 
+
           <div className="upload-preview">
 
-            <div className="preview-title">
-              LEDGER PIPELINE
-            </div>
+            <div>
 
-            <div className="pipeline">
-
-              <div className="pipeline-step">
-                <span>01</span>
-                <strong>IMPORT</strong>
-                <small>CSV ledger</small>
+              <div className="preview-title">
+                {t.pipeline}
               </div>
 
-              <div className="pipeline-line"></div>
+              <div className="pipeline">
 
-              <div className="pipeline-step">
-                <span>02</span>
-                <strong>AUDIT</strong>
-                <small>Patterns</small>
-              </div>
-
-              <div className="pipeline-line"></div>
-
-              <div className="pipeline-step">
-                <span>03</span>
-                <strong>ADVISE</strong>
-                <small>AI insights</small>
-              </div>
-
-            </div>
-
-          </div>
-
-        </section>
-
-        {/* KPI CARDS */}
-
-        <section className="kpi-grid">
-
-          <div className="kpi-card">
-
-            <div className="kpi-label">
-              ↑ {t.inflow}
-            </div>
-
-            <div className="kpi-value">
-              {money(
-                audit?.total_inflow
-              )}
-            </div>
-
-            <div className="kpi-meta">
-              Recorded revenue
-            </div>
-
-          </div>
-
-          <div className="kpi-card">
-
-            <div className="kpi-label">
-              ↓ {t.outflow}
-            </div>
-
-            <div className="kpi-value">
-              {money(
-                audit?.total_outflow
-              )}
-            </div>
-
-            <div className="kpi-meta">
-              Operational spending
-            </div>
-
-          </div>
-
-          <div className="kpi-card highlight">
-
-            <div className="kpi-label">
-              ◆ {t.net}
-            </div>
-
-            <div className="kpi-value">
-              {money(
-                audit?.net_cash_flow
-              )}
-            </div>
-
-            <div className="kpi-meta">
-              Cash position
-            </div>
-
-          </div>
-
-          <div className="kpi-card">
-
-            <div className="kpi-label">
-              ! {t.risk}
-            </div>
-
-            <div
-              className={`risk-value ${riskClass}`}
-            >
-              {risk}
-            </div>
-
-            <div className="kpi-meta">
-              Revenue volatility
-            </div>
-
-          </div>
-
-        </section>
-
-        {/* ANALYSIS GRID */}
-
-        <section className="analysis-grid">
-
-          {/* ANOMALIES */}
-
-          <div className="panel">
-
-            <div className="panel-header">
-
-              <div>
-                <div className="panel-kicker">
-                  AUDIT SIGNALS
+                <div className="pipeline-step">
+                  <span>01</span>
+                  <strong>
+                    {t.import}
+                  </strong>
+                  <small>
+                    CSV / Image / Audio
+                  </small>
                 </div>
 
-                <h3>
-                  {t.anomalies}
-                </h3>
-              </div>
+                <div className="pipeline-line" />
 
-              <span className="count-badge">
-                {audit?.anomalies?.length ||
-                  0}
-              </span>
+                <div className="pipeline-step">
+                  <span>02</span>
+                  <strong>
+                    {t.audit}
+                  </strong>
+                  <small>
+                    Patterns
+                  </small>
+                </div>
+
+                <div className="pipeline-line" />
+
+                <div className="pipeline-step">
+                  <span>03</span>
+                  <strong>
+                    {t.advise}
+                  </strong>
+                  <small>
+                    AI insights
+                  </small>
+                </div>
+
+              </div>
 
             </div>
 
-            <div className="anomaly-list">
+          </div>
 
-              {audit?.anomalies?.length ? (
-                audit.anomalies
+        </section>
+
+
+        {/* KPI */}
+        {audit && (
+          <section className="kpi-grid">
+
+            <div className="kpi-card">
+              <div className="kpi-label">
+                ↑ {t.inflow}
+              </div>
+
+              <div className="kpi-value">
+                {money(
+                  audit.total_inflow
+                )}
+              </div>
+
+              <div className="kpi-meta">
+                {t.revenue}
+              </div>
+            </div>
+
+
+            <div className="kpi-card">
+              <div className="kpi-label">
+                ↓ {t.outflow}
+              </div>
+
+              <div className="kpi-value">
+                {money(
+                  audit.total_outflow
+                )}
+              </div>
+
+              <div className="kpi-meta">
+                {t.spending}
+              </div>
+            </div>
+
+
+            <div className="kpi-card highlight">
+              <div className="kpi-label">
+                ◆ {t.net}
+              </div>
+
+              <div className="kpi-value">
+                {money(
+                  audit.net_cash_flow
+                )}
+              </div>
+
+              <div className="kpi-meta">
+                {t.cash}
+              </div>
+            </div>
+
+
+            <div className="kpi-card">
+              <div className="kpi-label">
+                ! {t.risk}
+              </div>
+
+              <div
+                className={`risk-value ${riskClass}`}
+              >
+                {audit.revenue_volatility?.includes(
+                  "High"
+                )
+                  ? "HIGH"
+                  : "STABLE"}
+              </div>
+
+              <div className="kpi-meta">
+                {t.volatility}
+              </div>
+            </div>
+
+          </section>
+        )}
+
+
+        {/* AUDIT SIGNALS */}
+        {audit && (
+          <section className="analysis-grid">
+
+            {/* ANOMALIES */}
+            <div className="panel">
+
+              <div className="panel-header">
+
+                <div>
+                  <div className="panel-kicker">
+                    {t.signals}
+                  </div>
+
+                  <h3>
+                    {t.anomalies}
+                  </h3>
+                </div>
+
+                <div className="count-badge">
+                  {audit.anomalies?.length ||
+                    0}
+                </div>
+
+              </div>
+
+
+              <div className="anomaly-list">
+
+                {(audit.anomalies || [])
                   .slice(0, 5)
                   .map((item, index) => (
+
                     <div
                       className="anomaly-item"
                       key={
@@ -1181,123 +888,118 @@ function App() {
                       </div>
 
                     </div>
-                  ))
-              ) : (
-                <div className="empty-state">
-                  No anomalies detected.
-                </div>
-              )}
 
-            </div>
+                  ))}
 
-          </div>
+                {(!audit.anomalies ||
+                  audit.anomalies.length ===
+                    0) && (
+                  <div className="empty-state">
+                    No major anomalies detected.
+                  </div>
+                )}
 
-          {/* RECURRING */}
-
-          <div className="panel">
-
-            <div className="panel-header">
-
-              <div>
-                <div className="panel-kicker">
-                  FIXED COMMITMENTS
-                </div>
-
-                <h3>
-                  {t.recurring}
-                </h3>
               </div>
 
-              <span className="count-badge">
-                {audit
-                  ?.recurring_charges
-                  ?.length || 0}
-              </span>
-
             </div>
 
-            <div className="recurring-list">
 
-              {audit
-                ?.recurring_charges
-                ?.length ? (
-                audit.recurring_charges
+            {/* RECURRING */}
+            <div className="panel">
+
+              <div className="panel-header">
+
+                <div>
+                  <div className="panel-kicker">
+                    FIXED COMMITMENTS
+                  </div>
+
+                  <h3>
+                    {t.recurring}
+                  </h3>
+                </div>
+
+                <div className="count-badge">
+                  {audit
+                    .recurring_charges
+                    ?.length || 0}
+                </div>
+
+              </div>
+
+
+              <div className="recurring-list">
+
+                {(audit.recurring_charges ||
+                  [])
                   .slice(0, 5)
-                  .map(
-                    (item, index) => (
-                      <div
-                        className="recurring-item"
-                        key={
-                          item.merchant ||
-                          index
-                        }
-                      >
+                  .map((item, index) => (
 
-                        <div className="merchant-icon">
-                          $
-                        </div>
+                    <div
+                      className="recurring-item"
+                      key={
+                        item.merchant ||
+                        index
+                      }
+                    >
 
-                        <div className="recurring-main">
+                      <div className="merchant-icon">
+                        $
+                      </div>
 
-                          <strong>
-                            {item.merchant}
-                          </strong>
+                      <div className="recurring-main">
 
-                          <span>
-                            {item.category}
-                          </span>
+                        <strong>
+                          {item.merchant}
+                        </strong>
 
-                        </div>
-
-                        <div className="recurring-price">
-                          {money(
-                            item.monthly_avg
-                          )}
-                          <small>
-                            /mo
-                          </small>
-                        </div>
+                        <span>
+                          {item.category}
+                        </span>
 
                       </div>
-                    )
-                  )
-              ) : (
-                <div className="empty-state">
-                  No recurring costs found.
-                </div>
-              )}
+
+                      <div className="recurring-price">
+                        {money(
+                          item.monthly_avg
+                        )}
+
+                        <small>
+                          /month
+                        </small>
+                      </div>
+
+                    </div>
+
+                  ))}
+
+              </div>
 
             </div>
 
-          </div>
+          </section>
+        )}
 
-        </section>
 
         {/* WHAT IF */}
-
         <section className="finance-lab">
 
           <div className="lab-heading">
 
             <div>
-              <div className="panel-kicker">
-                SCENARIO ENGINE
+              <div className="section-tag">
+                {t.scenario}
               </div>
 
-              <h2>
-                {t.financeLab}
-              </h2>
+              <h2>{t.lab}</h2>
 
-              <p>
-                Test expense reductions
-                before making a decision.
-              </p>
+              <p>{t.test}</p>
             </div>
 
             <div className="simulation-result">
 
               <span>
-                PROJECTED SAVINGS
+                {t.savings}
               </span>
 
               <strong>
@@ -1309,6 +1011,7 @@ function App() {
             </div>
 
           </div>
+
 
           <div className="sliders">
 
@@ -1330,13 +1033,14 @@ function App() {
                 max="50"
                 value={saasCut}
                 onChange={(e) =>
-                  handleSaasChange(
-                    Number(e.target.value)
+                  changeSaas(
+                    e.target.value
                   )
                 }
               />
 
             </div>
+
 
             <div className="slider-row">
 
@@ -1354,12 +1058,10 @@ function App() {
                 type="range"
                 min="0"
                 max="50"
-                value={
-                  contractorCut
-                }
+                value={contractorCut}
                 onChange={(e) =>
-                  handleContractorChange(
-                    Number(e.target.value)
+                  changeContractor(
+                    e.target.value
                   )
                 }
               />
@@ -1368,18 +1070,18 @@ function App() {
 
           </div>
 
+
           <div className="scenario-bottom">
 
             <div className="scenario-stat">
 
               <span>
-                CURRENT NET
+                {t.current}
               </span>
 
               <strong>
                 {money(
-                  simulation?.original_net ??
-                    audit?.net_cash_flow
+                  simulation?.original_net
                 )}
               </strong>
 
@@ -1392,7 +1094,7 @@ function App() {
             <div className="scenario-stat positive">
 
               <span>
-                ADJUSTED NET
+                {t.adjusted}
               </span>
 
               <strong>
@@ -1407,8 +1109,8 @@ function App() {
 
         </section>
 
-        {/* AI ADVISOR */}
 
+        {/* AI ADVISOR */}
         <section className="advisor-panel">
 
           <div className="advisor-header">
@@ -1419,8 +1121,8 @@ function App() {
                 ✦
               </div>
 
-              <div className="panel-kicker">
-                INTELLIGENCE LAYER
+              <div className="section-tag">
+                {t.intelligence}
               </div>
 
               <h2>
@@ -1428,44 +1130,39 @@ function App() {
               </h2>
 
               <p>
-                Grounded financial recommendations
-                generated from your ledger.
+                {t.advisorText}
               </p>
 
             </div>
+
 
             <button
               className="generate-button"
               onClick={
                 generateAdvice
               }
-              disabled={
-                loadingAdvice
-              }
+              disabled={loadingPlan}
             >
-              {loadingAdvice
-                ? t.analyzing
+              {loadingPlan
+                ? "GENERATING..."
                 : t.generate}
-              <span>→</span>
             </button>
 
           </div>
 
-          {loadingTranslation && (
-            <div className="translation-loading">
-              Translating financial report...
-            </div>
-          )}
 
-          {translatedPlan && (
+          {plan && (
             <div className="advice-box">
 
               <div className="advice-language">
-                {selectedLanguage}
+                {LANGUAGES.find(
+                  (x) =>
+                    x.code === language
+                )?.name || "English"}
               </div>
 
               <div className="advice-text">
-                {translatedPlan}
+                {plan}
               </div>
 
             </div>
@@ -1473,18 +1170,16 @@ function App() {
 
         </section>
 
-        {/* FOOTER */}
 
         <footer className="dashboard-footer">
 
           <span>
-            WEALTHBRIDGE / SME FINANCIAL INTELLIGENCE
+            WEALTHBRIDGE / SME FINANCIAL
+            INTELLIGENCE
           </span>
 
           <span>
-            {audit
-              ? `${transactions.length || "800+"} ${t.transactionsCount}`
-              : "Ready"}
+            MULTIMODAL DATA ENGINE
           </span>
 
         </footer>
@@ -1494,5 +1189,3 @@ function App() {
     </div>
   );
 }
-
-export default App;

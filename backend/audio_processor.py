@@ -1,55 +1,77 @@
-from pathlib import Path
-import uuid
+import json
+import os
+
+from google import genai
 
 
-ALLOWED_AUDIO_TYPES = {
-    ".mp3",
-    ".wav",
-    ".m4a"
+def process_audio(file_path):
+
+    api_key = os.getenv(
+        "GEMINI_API_KEY"
+    )
+
+    if not api_key:
+        raise ValueError(
+            "GEMINI_API_KEY is missing."
+        )
+
+    client = genai.Client(
+        api_key=api_key
+    )
+
+    uploaded = client.files.upload(
+        file=file_path
+    )
+
+    prompt = """
+You are a financial data extraction assistant.
+
+Listen to this audio recording.
+
+The recording may describe:
+- sales
+- revenue
+- expenses
+- payments
+- purchases
+- business transactions
+
+Extract all financial transactions mentioned.
+
+Return ONLY valid JSON:
+
+{
+  "transactions": [
+    {
+      "tx_id": "AUD-001",
+      "date": "YYYY-MM-DD",
+      "merchant": "merchant name",
+      "category": "category",
+      "amount": 0,
+      "transaction_type": "income"
+    }
+  ]
 }
 
+Do not invent financial information.
+If a value is unavailable, use an empty string.
+"""
 
-def process_audio(
-    file_bytes: bytes,
-    filename: str
-):
-
-    extension = Path(
-        filename
-    ).suffix.lower()
-
-    if extension not in ALLOWED_AUDIO_TYPES:
-        raise ValueError(
-            "Unsupported audio format."
-        )
-
-    upload_dir = Path("uploads")
-
-    upload_dir.mkdir(
-        parents=True,
-        exist_ok=True
+    response = client.models.generate_content(
+        model="gemini-3.8-flash",
+        contents=[
+            prompt,
+            uploaded
+        ]
     )
 
-    new_name = (
-        f"{uuid.uuid4().hex}"
-        f"{extension}"
-    )
+    text = response.text.strip()
 
-    file_path = upload_dir / new_name
+    if text.startswith("```"):
+        text = text.replace(
+            "```json", ""
+        ).replace(
+            "```", ""
+        ).strip()
 
-    with open(
-        file_path,
-        "wb"
-    ) as file:
-
-        file.write(file_bytes)
-
-    return {
-        "status": "uploaded",
-        "file_type": "audio",
-        "filename": filename,
-        "saved_path": str(file_path),
-        "message": (
-            "Audio uploaded successfully."
-        )
-    }
+    return json.loads(text)

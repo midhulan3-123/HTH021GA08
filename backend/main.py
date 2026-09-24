@@ -1,7 +1,5 @@
-import io
+import os
 import pandas as pd
-
-from typing import Optional
 
 from fastapi import (
     FastAPI,
@@ -11,8 +9,8 @@ from fastapi import (
 )
 
 from fastapi.middleware.cors import CORSMiddleware
-
 from pydantic import BaseModel
+from typing import Optional
 
 from engine import (
     generate_synthetic_transactions,
@@ -20,9 +18,16 @@ from engine import (
     synthesize_advice
 )
 
+from file_processor import process_uploaded_file
+
+
+# =========================================================
+# APP
+# =========================================================
 
 app = FastAPI(
-    title="WealthBridge SME Financial Advisor API",
+    title="WealthBridge Financial Advisor API",
+    description="SME Financial Intelligence Backend",
     version="2.0.0"
 )
 
@@ -41,14 +46,14 @@ app.add_middleware(
 
 
 # =========================================================
-# DATA
+# STORAGE
 # =========================================================
 
 current_df = generate_synthetic_transactions(800)
 
 
 # =========================================================
-# MODELS
+# REQUEST MODELS
 # =========================================================
 
 class AdviceRequest(BaseModel):
@@ -61,14 +66,25 @@ class WhatIfRequest(BaseModel):
 
 
 # =========================================================
-# HEALTH
+# HEALTH CHECK
 # =========================================================
+
+@app.get("/")
+def root():
+
+    return {
+        "status": "online",
+        "project": "WealthBridge",
+        "message": "Financial Advisor API is running"
+    }
+
 
 @app.get("/api/health")
 def health():
+
     return {
-        "status": "online",
-        "service": "WealthBridge"
+        "status": "healthy",
+        "service": "WealthBridge Backend"
     }
 
 
@@ -97,7 +113,7 @@ def get_audit():
 
 
 # =========================================================
-# UPLOAD CSV / IMAGE / AUDIO
+# UPLOAD FILE
 # =========================================================
 
 @app.post("/api/upload")
@@ -115,18 +131,7 @@ async def upload_file(
 
     filename = file.filename.lower()
 
-    if "." not in filename:
-        raise HTTPException(
-            status_code=400,
-            detail="File extension missing."
-        )
-
-    extension = (
-        "."
-        + filename.rsplit(".", 1)[1]
-    )
-
-    allowed = {
+    allowed_extensions = {
         ".csv",
         ".jpg",
         ".jpeg",
@@ -137,220 +142,132 @@ async def upload_file(
         ".m4a"
     }
 
-    if extension not in allowed:
+    extension = os.path.splitext(
+        filename
+    )[1]
+
+    if extension not in allowed_extensions:
 
         raise HTTPException(
             status_code=400,
             detail=(
-                "Supported files: "
-                "CSV, JPG, PNG, WEBP, "
-                "MP3, WAV and M4A."
+                "Unsupported file type. "
+                "Use CSV, JPG, JPEG, PNG, "
+                "WEBP, MP3, WAV or M4A."
             )
         )
 
-    contents = await file.read()
+    # -----------------------------------------------------
+    # 10 MB LIMIT
+    # -----------------------------------------------------
 
-    if len(contents) > 10 * 1024 * 1024:
+    file_bytes = await file.read()
+
+    if len(file_bytes) > 10 * 1024 * 1024:
 
         raise HTTPException(
-            status_code=400,
+            status_code=413,
             detail="Maximum file size is 10 MB."
         )
 
+    try:
 
-    # =====================================================
-    # CSV
-    # =====================================================
-
-    if extension == ".csv":
-
-        try:
-
-            df = pd.read_csv(
-                io.BytesIO(contents)
-            )
-
-        except Exception as exc:
-
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid CSV: {exc}"
-            )
-
-
-        # Normalize column names
-
-        df.columns = [
-            str(column)
-            .strip()
-            .lower()
-            .replace(" ", "_")
-            for column in df.columns
-        ]
-
-
-        # Common column names
-
-        rename_map = {
-            "transaction_id": "tx_id",
-            "id": "tx_id",
-            "transaction_date": "date",
-            "timestamp": "date",
-            "description": "merchant",
-            "vendor": "merchant",
-            "amount_usd": "amount",
-            "value": "amount"
-        }
-
-        df = df.rename(
-            columns=rename_map
+        result = process_uploaded_file(
+            file_bytes,
+            file.filename
         )
 
+        # =================================================
+        # CSV
+        # =================================================
 
-        required = {
-            "date",
-            "amount",
-            "merchant",
-            "category"
-        }
+        if result.get("file_type") == "csv":
 
-        missing = required - set(
-            df.columns
-        )
+            uploaded_df = result["data"]
 
-        if missing:
+            if uploaded_df.empty:
 
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "CSV is missing columns: "
-                    + ", ".join(
-                        sorted(missing)
-                    )
+                raise HTTPException(
+                    status_code=400,
+                    detail="CSV contains no valid transactions."
                 )
+
+            current_df = uploaded_df
+
+            audit_data = audit_transactions(
+                current_df
             )
 
+            return {
+                "status": "success",
+                "message": (
+                    "CSV uploaded and analyzed successfully."
+                ),
+                "file_type": "csv",
+                "filename": file.filename,
+                "rows": len(current_df),
+                "audit": audit_data
+            }
 
-        # Transaction ID
+        # =================================================
+        # IMAGE
+        # =================================================
 
-        if "tx_id" not in df.columns:
+        if result.get("file_type") == "image":
 
-            df["tx_id"] = [
-                f"UP-{i + 1:05d}"
-                for i in range(len(df))
-            ]
+            return {
+                "status": "success",
+                "message": (
+                    "Image uploaded successfully. "
+                    "OCR processing can be connected "
+                    "to extract transaction details."
+                ),
+                "file_type": "image",
+                "filename": file.filename,
+                "saved_path": result.get(
+                    "saved_path"
+                )
+            }
 
+        # =================================================
+        # AUDIO
+        # =================================================
 
-        # Amount
+        if result.get("file_type") == "audio":
 
-        df["amount"] = pd.to_numeric(
-            df["amount"],
-            errors="coerce"
+            return {
+                "status": "success",
+                "message": (
+                    "Audio uploaded successfully. "
+                    "Speech-to-text processing can "
+                    "be connected for transaction extraction."
+                ),
+                "file_type": "audio",
+                "filename": file.filename,
+                "saved_path": result.get(
+                    "saved_path"
+                )
+            }
+
+        raise HTTPException(
+            status_code=400,
+            detail="Unable to process uploaded file."
         )
 
-        df = df.dropna(
-            subset=["amount"]
+    except HTTPException:
+        raise
+
+    except Exception as e:
+
+        print(
+            "UPLOAD ERROR:",
+            str(e)
         )
 
-
-        # Date
-
-        df["date"] = pd.to_datetime(
-            df["date"],
-            errors="coerce"
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
         )
-
-        df = df.dropna(
-            subset=["date"]
-        )
-
-        df["date"] = (
-            df["date"]
-            .dt.strftime("%Y-%m-%d")
-        )
-
-
-        # Type
-
-        if "type" not in df.columns:
-
-            df["type"] = df["amount"].apply(
-                lambda x:
-                    "CREDIT"
-                    if x > 0
-                    else "DEBIT"
-            )
-
-
-        current_df = df[
-            [
-                "tx_id",
-                "date",
-                "merchant",
-                "category",
-                "amount",
-                "type"
-            ]
-        ].copy()
-
-
-        audit_data = audit_transactions(
-            current_df
-        )
-
-
-        return {
-            "status": "success",
-            "file_type": "csv",
-            "filename": file.filename,
-            "rows": len(current_df),
-            "audit": audit_data
-        }
-
-
-    # =====================================================
-    # IMAGE
-    # =====================================================
-
-    if extension in {
-        ".jpg",
-        ".jpeg",
-        ".png",
-        ".webp"
-    }:
-
-        return {
-            "status": "success",
-            "file_type": "image",
-            "filename": file.filename,
-            "message": (
-                "Image received successfully. "
-                "Connect OCR/Vision processing "
-                "to extract transactions."
-            )
-        }
-
-
-    # =====================================================
-    # AUDIO
-    # =====================================================
-
-    if extension in {
-        ".mp3",
-        ".wav",
-        ".m4a"
-    }:
-
-        return {
-            "status": "success",
-            "file_type": "audio",
-            "filename": file.filename,
-            "message": (
-                "Audio received successfully. "
-                "Connect speech-to-text processing "
-                "to extract transactions."
-            )
-        }
 
 
 # =========================================================
@@ -364,10 +281,14 @@ def regenerate_data(
 
     global current_df
 
-    current_df = (
-        generate_synthetic_transactions(
-            rows
-        )
+    if rows < 10:
+        rows = 10
+
+    if rows > 10000:
+        rows = 10000
+
+    current_df = generate_synthetic_transactions(
+        rows
     )
 
     return {
@@ -381,7 +302,7 @@ def regenerate_data(
 # =========================================================
 
 @app.post("/api/generate-plan")
-def generate_plan(
+def get_plan(
     req: AdviceRequest
 ):
 
@@ -389,22 +310,23 @@ def generate_plan(
         current_df
     )
 
-    plan = synthesize_advice(
+    plan_text = synthesize_advice(
         audit_data,
         api_key=req.api_key
     )
 
     return {
-        "plan": plan
+        "status": "success",
+        "plan": plan_text
     }
 
 
 # =========================================================
-# WHAT-IF
+# WHAT-IF ANALYSIS
 # =========================================================
 
 @app.post("/api/what-if")
-def what_if(
+def simulate(
     req: WhatIfRequest
 ):
 
@@ -426,41 +348,27 @@ def what_if(
         0.0
     )
 
-
     savings = (
         saas_total
-        * (
-            req.saas_reduction_pct
-            / 100
-        )
+        * (req.saas_reduction_pct / 100.0)
     ) + (
         contractor_total
-        * (
-            req.contractor_reduction_pct
-            / 100
-        )
+        * (req.contractor_reduction_pct / 100.0)
     )
-
 
     adjusted_net = (
         audit_data["net_cash_flow"]
         + savings
     )
 
-
     return {
         "projected_savings": round(
             savings,
             2
         ),
-
-        "original_net": round(
-            audit_data[
-                "net_cash_flow"
-            ],
-            2
-        ),
-
+        "original_net": audit_data[
+            "net_cash_flow"
+        ],
         "adjusted_net": round(
             adjusted_net,
             2

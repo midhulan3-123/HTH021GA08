@@ -1,4 +1,6 @@
 import os
+import io
+import pandas as pd
 
 from fastapi import (
     FastAPI,
@@ -11,129 +13,125 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from pydantic import BaseModel
 
-from typing import Optional
+from dotenv import load_dotenv
 
 from engine import (
-    generate_synthetic_transactions,
     audit_transactions,
     synthesize_advice
 )
 
-from file_processor import (
-    process_uploaded_file
-)
+
+# ============================================================
+# ENVIRONMENT
+# ============================================================
+
+load_dotenv()
 
 
-# =========================================================
-# APP
-# =========================================================
+# ============================================================
+# FASTAPI
+# ============================================================
 
 app = FastAPI(
-    title="WealthBridge Financial Advisor API",
-    description="SME Financial Intelligence Backend",
+    title="WealthBridge API",
+    description="SME Financial Intelligence API",
     version="2.0.0"
 )
 
 
-# =========================================================
+# ============================================================
 # CORS
-# =========================================================
+# ============================================================
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+
     allow_credentials=True,
+
     allow_methods=["*"],
+
     allow_headers=["*"],
 )
 
 
-# =========================================================
-# CURRENT DATA
-# =========================================================
+# ============================================================
+# GLOBAL AUDIT DATA
+# ============================================================
 
-current_df = generate_synthetic_transactions(
-    800
-)
+current_audit = None
 
 
-# =========================================================
-# MODELS
-# =========================================================
-
-class AdviceRequest(BaseModel):
-
-    api_key: Optional[str] = None
-
+# ============================================================
+# REQUEST MODEL
+# ============================================================
 
 class WhatIfRequest(BaseModel):
 
-    saas_reduction_pct: float
+    saas_reduction_pct: float = 15
 
-    contractor_reduction_pct: float
-
-
-# =========================================================
-# ROOT
-# =========================================================
-
-@app.get("/")
-def root():
-
-    return {
-        "status": "online",
-        "project": "WealthBridge",
-        "message": "Financial Advisor API is running"
-    }
+    contractor_reduction_pct: float = 10
 
 
-# =========================================================
-# HEALTH
-# =========================================================
+class AdviceRequest(BaseModel):
+
+    api_key: str | None = None
+
+
+# ============================================================
+# HEALTH CHECK
+# ============================================================
 
 @app.get("/api/health")
 def health():
 
     return {
-        "status": "healthy",
-        "service": "WealthBridge Backend"
+        "status": "online",
+        "service": "WealthBridge",
+        "version": "2.0.0"
     }
 
 
-# =========================================================
-# TRANSACTIONS
-# =========================================================
-
-@app.get("/api/transactions")
-def get_transactions():
-
-    return current_df.to_dict(
-        orient="records"
-    )
-
-
-# =========================================================
-# AUDIT
-# =========================================================
+# ============================================================
+# GET CURRENT AUDIT
+# ============================================================
 
 @app.get("/api/audit")
 def get_audit():
 
-    return audit_transactions(
-        current_df
-    )
+    global current_audit
+
+    if current_audit is None:
+
+        demo_df = create_demo_data()
+
+        current_audit = audit_transactions(
+            demo_df
+        )
+
+    return current_audit
 
 
-# =========================================================
-# UPLOAD
-# =========================================================
+# ============================================================
+# CSV UPLOAD
+# ============================================================
 
 @app.post("/api/upload")
 async def upload_file(
     file: UploadFile = File(...)
 ):
 
-    global current_df
+    global current_audit
+
+    # --------------------------------------------------------
+    # Validate filename
+    # --------------------------------------------------------
 
     if not file.filename:
 
@@ -142,124 +140,50 @@ async def upload_file(
             detail="No file selected."
         )
 
-    filename = file.filename.lower()
+    extension = (
+        os.path.splitext(
+            file.filename
+        )[1]
+        .lower()
+    )
 
-    allowed_extensions = {
-        ".csv",
-        ".jpg",
-        ".jpeg",
-        ".png",
-        ".webp",
-        ".mp3",
-        ".wav",
-        ".m4a"
-    }
-
-    extension = os.path.splitext(
-        filename
-    )[1]
-
-    if extension not in allowed_extensions:
+    if extension != ".csv":
 
         raise HTTPException(
             status_code=400,
             detail=(
-                "Unsupported file type. "
-                "Use CSV, JPG, JPEG, PNG, "
-                "WEBP, MP3, WAV or M4A."
+                "Only CSV files are currently "
+                "supported by the backend."
             )
         )
 
-    file_bytes = await file.read()
-
-    # 10 MB
-    if len(file_bytes) > 10 * 1024 * 1024:
-
-        raise HTTPException(
-            status_code=413,
-            detail="Maximum file size is 10 MB."
-        )
+    # --------------------------------------------------------
+    # Read file
+    # --------------------------------------------------------
 
     try:
 
-        result = process_uploaded_file(
-            file_bytes,
-            file.filename
-        )
+        contents = await file.read()
 
-        # =================================================
-        # CSV
-        # =================================================
+        if not contents:
 
-        if result.get("file_type") == "csv":
-
-            uploaded_df = result["data"]
-
-            if uploaded_df.empty:
-
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        "CSV contains no valid transactions."
-                    )
-                )
-
-            current_df = uploaded_df
-
-            audit_data = audit_transactions(
-                current_df
+            raise HTTPException(
+                status_code=400,
+                detail="Uploaded CSV is empty."
             )
 
-            return {
-                "status": "success",
-                "message": (
-                    "CSV uploaded and analyzed successfully."
-                ),
-                "file_type": "csv",
-                "filename": file.filename,
-                "rows": len(current_df),
-                "audit": audit_data
-            }
+        # 10 MB limit
+        if len(contents) > (
+            10 * 1024 * 1024
+        ):
 
-        # =================================================
-        # IMAGE
-        # =================================================
+            raise HTTPException(
+                status_code=400,
+                detail="Maximum file size is 10 MB."
+            )
 
-        if result.get("file_type") == "image":
-
-            return {
-                "status": "success",
-                "message": (
-                    "Image uploaded successfully."
-                ),
-                "file_type": "image",
-                "filename": file.filename,
-                "saved_path": result.get(
-                    "saved_path"
-                )
-            }
-
-        # =================================================
-        # AUDIO
-        # =================================================
-
-        if result.get("file_type") == "audio":
-
-            return {
-                "status": "success",
-                "message": (
-                    "Audio uploaded successfully."
-                ),
-                "file_type": "audio",
-                "filename": file.filename,
-                "saved_path": result.get(
-                    "saved_path"
-                )
-            }
-
-        raise HTTPException(
-            status_code=400,
-            detail="Unable to process file."
+        df = pd.read_csv(
+            io.BytesIO(contents)
         )
 
     except HTTPException:
@@ -267,141 +191,486 @@ async def upload_file(
 
     except Exception as e:
 
-        print(
-            "UPLOAD ERROR:",
-            str(e)
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Could not read CSV: {str(e)}"
+            )
         )
+
+    # --------------------------------------------------------
+    # Check rows
+    # --------------------------------------------------------
+
+    if df.empty:
 
         raise HTTPException(
             status_code=400,
-            detail=str(e)
+            detail="CSV contains no transaction rows."
         )
 
+    # --------------------------------------------------------
+    # Analyze
+    # --------------------------------------------------------
 
-# =========================================================
+    try:
+
+        audit = audit_transactions(
+            df
+        )
+
+        current_audit = audit
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                f"Transaction analysis failed: {str(e)}"
+            )
+        )
+
+    return {
+
+        "success": True,
+
+        "message":
+            "CSV analyzed successfully.",
+
+        "filename":
+            file.filename,
+
+        "rows":
+            len(df),
+
+        "audit":
+            audit
+    }
+
+
+# ============================================================
 # DEMO DATA
-# =========================================================
+# ============================================================
 
 @app.post("/api/regenerate")
-def regenerate_data(
-    rows: int = 800
-):
+def regenerate_demo():
 
-    global current_df
+    global current_audit
 
-    rows = max(
-        10,
-        min(rows, 10000)
-    )
+    df = create_demo_data()
 
-    current_df = (
-        generate_synthetic_transactions(
-            rows
-        )
+    current_audit = audit_transactions(
+        df
     )
 
     return {
-        "status": "success",
-        "count": len(current_df)
+
+        "success": True,
+
+        "message":
+            "Demo data generated.",
+
+        "audit":
+            current_audit
     }
 
 
-# =========================================================
-# AI PLAN
-# =========================================================
-
-@app.post("/api/generate-plan")
-def get_plan(
-    req: AdviceRequest
-):
-
-    audit_data = audit_transactions(
-        current_df
-    )
-
-    plan_text = synthesize_advice(
-        audit_data,
-        api_key=req.api_key
-    )
-
-    return {
-        "status": "success",
-        "plan": plan_text
-    }
-
-
-# =========================================================
-# WHAT IF
-# =========================================================
+# ============================================================
+# WHAT-IF ANALYSIS
+# ============================================================
 
 @app.post("/api/what-if")
-def simulate(
-    req: WhatIfRequest
+def what_if(
+    request: WhatIfRequest
 ):
 
-    audit_data = audit_transactions(
-        current_df
+    global current_audit
+
+    if current_audit is None:
+
+        current_audit = audit_transactions(
+            create_demo_data()
+        )
+
+    # Prevent invalid percentages
+    saas_pct = max(
+        0,
+        min(
+            100,
+            request.saas_reduction_pct
+        )
     )
 
-    saas_total = audit_data[
-        "category_totals"
-    ].get(
-        "Software/SaaS",
-        0.0
+    contractor_pct = max(
+        0,
+        min(
+            100,
+            request.contractor_reduction_pct
+        )
     )
 
-    contractor_total = audit_data[
-        "category_totals"
-    ].get(
-        "Contractors",
-        0.0
+    original_net = float(
+        current_audit[
+            "net_cash_flow"
+        ]
     )
 
-    savings = (
+    recurring = current_audit.get(
+        "recurring_charges",
+        []
+    )
+
+    saas_total = 0
+
+    contractor_total = 0
+
+    for item in recurring:
+
+        category = (
+            item
+            .get("category", "")
+            .lower()
+        )
+
+        merchant = (
+            item
+            .get("merchant", "")
+            .lower()
+        )
+
+        monthly = float(
+            item.get(
+                "monthly_avg",
+                0
+            )
+        )
+
+        if (
+            "saas" in category
+            or "software" in category
+            or "subscription" in category
+            or "software" in merchant
+        ):
+
+            saas_total += monthly
+
+        if (
+            "contract" in category
+            or "contractor" in category
+            or "developer" in category
+        ):
+
+            contractor_total += monthly
+
+    # If no categorized recurring expenses
+    # were detected, use 0 rather than inventing data.
+
+    saas_savings = (
         saas_total *
-        (
-            req.saas_reduction_pct /
-            100.0
-        )
-    ) + (
+        saas_pct /
+        100
+    )
+
+    contractor_savings = (
         contractor_total *
-        (
-            req.contractor_reduction_pct /
-            100.0
-        )
+        contractor_pct /
+        100
+    )
+
+    projected_savings = (
+        saas_savings +
+        contractor_savings
     )
 
     adjusted_net = (
-        audit_data["net_cash_flow"]
-        + savings
+        original_net +
+        projected_savings
     )
 
     return {
-        "projected_savings": round(
-            savings,
-            2
-        ),
-        "original_net": audit_data[
-            "net_cash_flow"
-        ],
-        "adjusted_net": round(
-            adjusted_net,
-            2
-        )
+
+        "saas_reduction_pct":
+            saas_pct,
+
+        "contractor_reduction_pct":
+            contractor_pct,
+
+        "saas_monthly_base":
+            round(
+                saas_total,
+                2
+            ),
+
+        "contractor_monthly_base":
+            round(
+                contractor_total,
+                2
+            ),
+
+        "saas_savings":
+            round(
+                saas_savings,
+                2
+            ),
+
+        "contractor_savings":
+            round(
+                contractor_savings,
+                2
+            ),
+
+        "projected_savings":
+            round(
+                projected_savings,
+                2
+            ),
+
+        "original_net":
+            round(
+                original_net,
+                2
+            ),
+
+        "adjusted_net":
+            round(
+                adjusted_net,
+                2
+            )
     }
 
 
-# =========================================================
-# RUN
-# =========================================================
+# ============================================================
+# AI ADVISOR
+# ============================================================
 
-if __name__ == "__main__":
+@app.post("/api/generate-plan")
+def generate_plan(
+    request: AdviceRequest
+):
 
-    import uvicorn
+    global current_audit
 
-    uvicorn.run(
-        "main:app",
-        host="127.0.0.1",
-        port=8000,
-        reload=True
+    if current_audit is None:
+
+        current_audit = audit_transactions(
+            create_demo_data()
+        )
+
+    # IMPORTANT:
+    # API key can come from .env.
+    # The frontend does not need to send it.
+
+    api_key = (
+        request.api_key
+        or os.getenv(
+            "OPENAI_API_KEY"
+        )
     )
+
+    plan = synthesize_advice(
+        current_audit,
+        api_key
+    )
+
+    return {
+
+        "success": True,
+
+        "plan":
+            plan
+    }
+
+
+# ============================================================
+# DEMO DATA
+# ============================================================
+
+def create_demo_data():
+
+    data = [
+
+        {
+            "tx_id": "TX-1001",
+            "date": "2026-09-01",
+            "merchant": "Client Payment A",
+            "category": "Sales",
+            "amount": 15000,
+            "type": "income"
+        },
+
+        {
+            "tx_id": "TX-1002",
+            "date": "2026-09-02",
+            "merchant": "Dev Studio LLC",
+            "category": "Contractors",
+            "amount": 2400,
+            "type": "expense"
+        },
+
+        {
+            "tx_id": "TX-1003",
+            "date": "2026-09-03",
+            "merchant": "HubSpot",
+            "category": "Software/SaaS",
+            "amount": 800,
+            "type": "expense"
+        },
+
+        {
+            "tx_id": "TX-1004",
+            "date": "2026-09-04",
+            "merchant": "AWS Cloud",
+            "category": "Software/SaaS",
+            "amount": 1287,
+            "type": "expense"
+        },
+
+        {
+            "tx_id": "TX-1005",
+            "date": "2026-09-05",
+            "merchant": "Amazon Business",
+            "category": "Office Supplies",
+            "amount": 1715,
+            "type": "expense"
+        },
+
+        {
+            "tx_id": "TX-1006",
+            "date": "2026-09-06",
+            "merchant": "Client Payment B",
+            "category": "Sales",
+            "amount": 22000,
+            "type": "income"
+        },
+
+        {
+            "tx_id": "TX-1007",
+            "date": "2026-09-07",
+            "merchant": "Dev Studio LLC",
+            "category": "Contractors",
+            "amount": 2400,
+            "type": "expense"
+        },
+
+        {
+            "tx_id": "TX-1008",
+            "date": "2026-09-08",
+            "merchant": "HubSpot",
+            "category": "Software/SaaS",
+            "amount": 800,
+            "type": "expense"
+        },
+
+        {
+            "tx_id": "TX-1009",
+            "date": "2026-09-09",
+            "merchant": "Client Payment C",
+            "category": "Sales",
+            "amount": 18500,
+            "type": "income"
+        },
+
+        {
+            "tx_id": "TX-1010",
+            "date": "2026-09-10",
+            "merchant": "Dev Studio LLC",
+            "category": "Contractors",
+            "amount": 6500,
+            "type": "expense"
+        },
+
+        {
+            "tx_id": "TX-1011",
+            "date": "2026-09-11",
+            "merchant": "Starbucks",
+            "category": "Travel & Meals",
+            "amount": 1033,
+            "type": "expense"
+        },
+
+        {
+            "tx_id": "TX-1012",
+            "date": "2026-09-12",
+            "merchant": "Client Payment D",
+            "category": "Sales",
+            "amount": 19500,
+            "type": "income"
+        },
+
+        {
+            "tx_id": "TX-1013",
+            "date": "2026-09-13",
+            "merchant": "QA Services",
+            "category": "Contractors",
+            "amount": 673,
+            "type": "expense"
+        },
+
+        {
+            "tx_id": "TX-1014",
+            "date": "2026-09-14",
+            "merchant": "Dev Studio LLC",
+            "category": "Contractors",
+            "amount": 996,
+            "type": "expense"
+        },
+
+        {
+            "tx_id": "TX-1015",
+            "date": "2026-09-15",
+            "merchant": "Client Payment E",
+            "category": "Sales",
+            "amount": 17000,
+            "type": "income"
+        },
+
+        {
+            "tx_id": "TX-1016",
+            "date": "2026-09-16",
+            "merchant": "QA Services",
+            "category": "Contractors",
+            "amount": 460,
+            "type": "expense"
+        },
+
+        {
+            "tx_id": "TX-1017",
+            "date": "2026-09-17",
+            "merchant": "Dev Studio LLC",
+            "category": "Contractors",
+            "amount": 587,
+            "type": "expense"
+        },
+
+        {
+            "tx_id": "TX-1018",
+            "date": "2026-09-18",
+            "merchant": "Client Payment F",
+            "category": "Sales",
+            "amount": 21000,
+            "type": "income"
+        }
+
+    ]
+
+    return pd.DataFrame(data)
+
+
+# ============================================================
+# ROOT
+# ============================================================
+
+@app.get("/")
+def root():
+
+    return {
+
+        "message":
+            "WealthBridge API is running.",
+
+        "docs":
+            "/docs",
+
+        "health":
+            "/api/health"
+    }

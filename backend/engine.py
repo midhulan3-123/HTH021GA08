@@ -1,556 +1,472 @@
 import os
 import json
-import numpy as np
 import pandas as pd
+import numpy as np
 
-from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
 load_dotenv()
 
 
 # ============================================================
-# 1. GENERATE SYNTHETIC TRANSACTIONS
+# NORMALIZE CSV
 # ============================================================
 
-def generate_synthetic_transactions(
-    num_records: int = 800
-) -> pd.DataFrame:
+def normalize_transactions(df: pd.DataFrame) -> pd.DataFrame:
 
-    np.random.seed(42)
+    df = df.copy()
 
-    end_date = datetime.now()
-    start_date = end_date - timedelta(days=180)
-
-    dates = [
-        start_date + timedelta(
-            days=int(x)
-        )
-        for x in np.random.uniform(
-            0, 180, num_records
-        )
+    # Clean column names
+    df.columns = [
+        str(column)
+        .strip()
+        .lower()
+        .replace(" ", "_")
+        .replace("-", "_")
+        for column in df.columns
     ]
 
-    dates.sort()
+    # Different possible names -> standard names
+    aliases = {
+        "transaction_id": "tx_id",
+        "transactionid": "tx_id",
+        "transaction": "tx_id",
+        "id": "tx_id",
 
-    categories = {
-        "Software/SaaS": [
-            "AWS Cloud",
-            "Slack",
-            "Google Workspace",
-            "HubSpot",
-            "Adobe CC"
-        ],
+        "transaction_date": "date",
+        "datetime": "date",
 
-        "Office Supplies": [
-            "Staples",
-            "Amazon Business",
-            "IKEA B2B"
-        ],
+        "vendor": "merchant",
+        "company": "merchant",
+        "description": "merchant",
 
-        "Utilities": [
-            "City Power & Water",
-            "Verizon Telecom",
-            "Metro Waste"
-        ],
+        "expense_category": "category",
+        "type_category": "category",
 
-        "Contractors": [
-            "Dev Studio LLC",
-            "Freelance Copywriter",
-            "QA Services"
-        ],
+        "value": "amount",
+        "price": "amount",
+        "total": "amount",
 
-        "Travel & Meals": [
-            "Delta Air",
-            "Uber",
-            "Local Bistro",
-            "Starbucks"
-        ],
-
-        "Revenue/Client Invoices": [
-            "Client Alpha Settlement",
-            "Client Beta Retainer",
-            "Project Gamma Milestones"
-        ]
+        "transaction_type": "type",
+        "direction": "type",
     }
 
-    records = []
+    for old_name, new_name in aliases.items():
 
-    # --------------------------------------------------------
-    # Recurring subscriptions
-    # --------------------------------------------------------
+        if (
+            old_name in df.columns
+            and new_name not in df.columns
+        ):
+            df[new_name] = df[old_name]
 
-    for month in range(6):
+    # ========================================================
+    # DEFAULT COLUMNS
+    # ========================================================
 
-        cur_month_date = (
-            start_date
-            + timedelta(days=30 * month + 5)
-        )
+    if "tx_id" not in df.columns:
 
-        records.append({
-            "tx_id":
-                f"TX-SUB-AWS-{month}",
+        df["tx_id"] = [
+            f"TX-{1001 + i}"
+            for i in range(len(df))
+        ]
 
-            "date":
-                cur_month_date,
+    if "date" not in df.columns:
+        df["date"] = pd.Timestamp.now()
 
-            "merchant":
-                "AWS Cloud",
+    if "merchant" not in df.columns:
+        df["merchant"] = "Unknown Merchant"
 
-            "category":
-                "Software/SaaS",
+    if "category" not in df.columns:
+        df["category"] = "Other"
 
-            "amount":
-                -450.0,
+    if "amount" not in df.columns:
+        df["amount"] = 0
 
-            "type":
-                "DEBIT"
-        })
+    if "type" not in df.columns:
+        df["type"] = "expense"
 
-        records.append({
-            "tx_id":
-                f"TX-SUB-HUB-{month}",
+    # ========================================================
+    # AMOUNT
+    # ========================================================
 
-            "date":
-                cur_month_date
-                + timedelta(days=2),
-
-            "merchant":
-                "HubSpot",
-
-            "category":
-                "Software/SaaS",
-
-            "amount":
-                -800.0,
-
-            "type":
-                "DEBIT"
-        })
-
-    # --------------------------------------------------------
-    # Revenue
-    # --------------------------------------------------------
-
-    for m in range(6):
-
-        rev_date = (
-            start_date
-            + timedelta(
-                days=30 * m
-                + int(
-                    np.random.choice(
-                        [2, 18, 27]
-                    )
-                )
-            )
-        )
-
-        rev_amount = float(
-            np.random.choice([
-                12500.0,
-                18000.0,
-                4500.0,
-                22000.0
-            ])
-        )
-
-        records.append({
-            "tx_id":
-                f"TX-REV-{m}",
-
-            "date":
-                rev_date,
-
-            "merchant":
-                "Client Alpha Settlement",
-
-            "category":
-                "Revenue/Client Invoices",
-
-            "amount":
-                rev_amount,
-
-            "type":
-                "CREDIT"
-        })
-
-    # --------------------------------------------------------
-    # Known anomalies
-    # --------------------------------------------------------
-
-    records.append({
-        "tx_id":
-            "TX-ANOMALY-01",
-
-        "date":
-            end_date - timedelta(days=12),
-
-        "merchant":
-            "Dev Studio LLC",
-
-        "category":
-            "Contractors",
-
-        "amount":
-            -6500.0,
-
-        "type":
-            "DEBIT"
-    })
-
-    records.append({
-        "tx_id":
-            "TX-ANOMALY-02",
-
-        "date":
-            end_date - timedelta(days=20),
-
-        "merchant":
-            "Starbucks",
-
-        "category":
-            "Travel & Meals",
-
-        "amount":
-            -480.0,
-
-        "type":
-            "DEBIT"
-    })
-
-    # --------------------------------------------------------
-    # Remaining transactions
-    # --------------------------------------------------------
-
-    for i in range(
-        len(records),
-        num_records
-    ):
-
-        cat = np.random.choice(
-            list(categories.keys()),
-            p=[
-                0.25,
-                0.20,
-                0.15,
-                0.15,
-                0.20,
-                0.05
-            ]
-        )
-
-        merchant = np.random.choice(
-            categories[cat]
-        )
-
-        if cat == "Revenue/Client Invoices":
-
-            amt = round(
-                float(
-                    np.random.uniform(
-                        2000,
-                        8000
-                    )
-                ),
-                2
-            )
-
-            ttype = "CREDIT"
-
-        else:
-
-            amt = -round(
-                float(
-                    np.random.exponential(
-                        scale=120
-                    ) + 15
-                ),
-                2
-            )
-
-            ttype = "DEBIT"
-
-        records.append({
-            "tx_id":
-                f"TX-{i + 1000}",
-
-            "date":
-                dates[
-                    i % len(dates)
-                ],
-
-            "merchant":
-                merchant,
-
-            "category":
-                cat,
-
-            "amount":
-                amt,
-
-            "type":
-                ttype
-        })
-
-    df = pd.DataFrame(records)
-
-    df["date"] = (
-        pd.to_datetime(
-            df["date"]
-        )
-        .dt.strftime("%Y-%m-%d")
+    df["amount"] = (
+        df["amount"]
+        .astype(str)
+        .str.replace("$", "", regex=False)
+        .str.replace("₹", "", regex=False)
+        .str.replace("€", "", regex=False)
+        .str.replace("£", "", regex=False)
+        .str.replace(",", "", regex=False)
+        .str.strip()
     )
 
-    return (
-        df
-        .sort_values("date")
-        .reset_index(drop=True)
+    df["amount"] = pd.to_numeric(
+        df["amount"],
+        errors="coerce"
+    ).fillna(0)
+
+    # Absolute positive amount
+    df["amount"] = df["amount"].abs()
+
+    # ========================================================
+    # TYPE
+    # ========================================================
+
+    df["type"] = (
+        df["type"]
+        .fillna("expense")
+        .astype(str)
+        .str.lower()
+        .str.strip()
     )
+
+    df["type"] = df["type"].replace({
+
+        "income": "income",
+        "revenue": "income",
+        "credit": "income",
+        "inflow": "income",
+        "sale": "income",
+        "sales": "income",
+
+        "expense": "expense",
+        "expenses": "expense",
+        "debit": "expense",
+        "outflow": "expense",
+        "cost": "expense",
+        "purchase": "expense",
+    })
+
+    # Unknown types become expense
+    df.loc[
+        ~df["type"].isin(
+            ["income", "expense"]
+        ),
+        "type"
+    ] = "expense"
+
+    # ========================================================
+    # DATE
+    # ========================================================
+
+    df["date"] = pd.to_datetime(
+        df["date"],
+        errors="coerce"
+    )
+
+    df["date"] = df["date"].fillna(
+        pd.Timestamp.now()
+    )
+
+    df["date"] = df["date"].dt.strftime(
+        "%Y-%m-%d"
+    )
+
+    # ========================================================
+    # TEXT FIELDS
+    # ========================================================
+
+    for column in [
+        "tx_id",
+        "merchant",
+        "category"
+    ]:
+
+        df[column] = (
+            df[column]
+            .fillna("Unknown")
+            .astype(str)
+            .str.strip()
+        )
+
+    # ========================================================
+    # STANDARD ORDER
+    # ========================================================
+
+    return df[
+        [
+            "tx_id",
+            "date",
+            "merchant",
+            "category",
+            "amount",
+            "type"
+        ]
+    ]
 
 
 # ============================================================
-# 2. AUDIT TRANSACTIONS
+# AUDIT TRANSACTIONS
 # ============================================================
 
 def audit_transactions(
     df: pd.DataFrame
 ) -> dict:
 
-    debits = df[
-        df["amount"] < 0
-    ].copy()
+    df = normalize_transactions(df)
 
-    credits = df[
-        df["amount"] > 0
-    ].copy()
+    # ========================================================
+    # INFLOW / OUTFLOW
+    # ========================================================
+
+    income_df = df[
+        df["type"] == "income"
+    ]
+
+    expense_df = df[
+        df["type"] == "expense"
+    ]
 
     total_inflow = float(
-        credits["amount"].sum()
+        income_df["amount"].sum()
     )
 
     total_outflow = float(
-        abs(
-            debits["amount"].sum()
-        )
+        expense_df["amount"].sum()
     )
 
     net_cash_flow = (
-        total_inflow
-        - total_outflow
+        total_inflow -
+        total_outflow
     )
 
-    # --------------------------------------------------------
-    # Anomaly detection
-    # --------------------------------------------------------
+    # ========================================================
+    # REVENUE VOLATILITY
+    # ========================================================
+
+    if len(income_df) >= 2:
+
+        mean_revenue = float(
+            income_df["amount"].mean()
+        )
+
+        std_revenue = float(
+            income_df["amount"].std()
+        )
+
+        if mean_revenue > 0:
+
+            volatility_ratio = (
+                std_revenue /
+                mean_revenue
+            )
+
+        else:
+
+            volatility_ratio = 0
+
+    else:
+
+        volatility_ratio = 0
+
+    if volatility_ratio > 0.40:
+
+        revenue_volatility = (
+            "High (Irregular SME)"
+        )
+
+    else:
+
+        revenue_volatility = "Stable"
+
+    # ========================================================
+    # ANOMALIES
+    # ========================================================
 
     anomalies = []
 
-    for cat, group in debits.groupby(
-        "category"
-    ):
+    if len(expense_df) > 0:
 
-        if len(group) >= 5:
+        mean_expense = float(
+            expense_df["amount"].mean()
+        )
 
-            median = (
-                group["amount"]
-                .median()
-            )
+        std_expense = float(
+            expense_df["amount"].std()
+        )
 
-            diff = (
-                group["amount"]
-                - median
-            ).abs()
+        if np.isnan(std_expense):
+            std_expense = 0
 
-            mad = diff.median()
+        threshold = (
+            mean_expense +
+            (2 * std_expense)
+        )
 
-            if mad > 0:
+        anomaly_df = expense_df[
+            expense_df["amount"] >
+            threshold
+        ]
 
-                mod_z = (
-                    0.6745
-                    * diff
-                    / mad
-                )
+        for _, row in anomaly_df.iterrows():
 
-                outliers = group[
-                    mod_z > 3.0
-                ]
+            anomalies.append({
 
-                for _, r in outliers.iterrows():
+                "tx_id": str(
+                    row["tx_id"]
+                ),
 
-                    anomalies.append({
-                        "tx_id":
-                            str(r["tx_id"]),
+                "merchant": str(
+                    row["merchant"]
+                ),
 
-                        "date":
-                            str(r["date"]),
+                "category": str(
+                    row["category"]
+                ),
 
-                        "merchant":
-                            str(r["merchant"]),
+                "amount": round(
+                    float(row["amount"]),
+                    2
+                ),
 
-                        "category":
-                            str(r["category"]),
+                "reason":
+                    "Unusually high transaction"
+            })
 
-                        "amount":
-                            abs(
-                                float(
-                                    r["amount"]
-                                )
-                            ),
-
-                        "reason":
-                            (
-                                "Spike against "
-                                f"median "
-                                f"(${abs(median):.2f})"
-                            )
-                    })
-
-    # --------------------------------------------------------
-    # Recurring charges
-    # --------------------------------------------------------
+    # ========================================================
+    # RECURRING COSTS
+    # ========================================================
 
     recurring = []
 
-    for merchant, group in debits.groupby(
-        "merchant"
-    ):
+    if len(expense_df) > 0:
 
-        if len(group) >= 3:
-
-            monthly_est = (
-                abs(
-                    group["amount"].sum()
-                )
-                / 6.0
+        grouped = (
+            expense_df
+            .groupby(
+                [
+                    "merchant",
+                    "category"
+                ],
+                dropna=False
             )
+            .agg(
+                count=("amount", "count"),
+                total_spent=("amount", "sum"),
+                monthly_avg=("amount", "mean")
+            )
+            .reset_index()
+        )
+
+        recurring_df = grouped[
+            grouped["count"] >= 2
+        ]
+
+        for _, row in recurring_df.iterrows():
 
             recurring.append({
-                "merchant":
-                    str(merchant),
 
-                "category":
-                    str(
-                        group[
-                            "category"
-                        ].iloc[0]
+                "merchant": str(
+                    row["merchant"]
+                ),
+
+                "category": str(
+                    row["category"]
+                ),
+
+                "count": int(
+                    row["count"]
+                ),
+
+                "total_spent": round(
+                    float(
+                        row["total_spent"]
                     ),
+                    2
+                ),
 
-                "frequency":
-                    (
-                        f"{len(group)} "
-                        "transactions over "
-                        "6 months"
+                "monthly_avg": round(
+                    float(
+                        row["monthly_avg"]
                     ),
-
-                "total_spent":
-                    round(
-                        float(
-                            abs(
-                                group[
-                                    "amount"
-                                ].sum()
-                            )
-                        ),
-                        2
-                    ),
-
-                "monthly_avg":
-                    round(
-                        float(
-                            monthly_est
-                        ),
-                        2
-                    ),
-
-                "sample_tx_id":
-                    str(
-                        group[
-                            "tx_id"
-                        ].iloc[0]
-                    )
+                    2
+                )
             })
 
-    # --------------------------------------------------------
-    # Revenue volatility
-    # --------------------------------------------------------
+    # ========================================================
+    # CATEGORY TOTALS
+    # ========================================================
 
-    credits_copy = credits.copy()
+    category_totals = {}
 
-    credits_copy[
-        "month_year"
-    ] = pd.to_datetime(
-        credits_copy["date"]
-    ).dt.to_period("M")
+    if len(expense_df) > 0:
 
-    monthly_rev = (
-        credits_copy
-        .groupby("month_year")["amount"]
-        .sum()
-    )
-
-    rev_mean = (
-        float(monthly_rev.mean())
-        if len(monthly_rev) > 0
-        else 0.0
-    )
-
-    rev_std = (
-        float(monthly_rev.std())
-        if len(monthly_rev) > 0
-        else 0.0
-    )
-
-    volatility_ratio = (
-        rev_std / rev_mean
-        if rev_mean > 0
-        else 0.0
-    )
-
-    # --------------------------------------------------------
-    # Category totals
-    # --------------------------------------------------------
-
-    cat_totals = {
-        k: round(
-            float(abs(v)),
-            2
-        )
-
-        for k, v in (
-            debits
+        category_group = (
+            expense_df
             .groupby("category")["amount"]
             .sum()
-            .items()
         )
-    }
+
+        for category, amount in (
+            category_group.items()
+        ):
+
+            category_totals[
+                str(category)
+            ] = round(
+                float(amount),
+                2
+            )
+
+    # ========================================================
+    # TRANSACTIONS
+    # ========================================================
+
+    transactions = []
+
+    for _, row in df.iterrows():
+
+        transactions.append({
+
+            "tx_id": str(
+                row["tx_id"]
+            ),
+
+            "date": str(
+                row["date"]
+            ),
+
+            "merchant": str(
+                row["merchant"]
+            ),
+
+            "category": str(
+                row["category"]
+            ),
+
+            "amount": round(
+                float(row["amount"]),
+                2
+            ),
+
+            "type": str(
+                row["type"]
+            )
+        })
+
+    # ========================================================
+    # FINAL AUDIT
+    # ========================================================
 
     return {
 
-        "total_inflow":
-            round(
-                total_inflow,
-                2
-            ),
+        "total_inflow": round(
+            total_inflow,
+            2
+        ),
 
-        "total_outflow":
-            round(
-                total_outflow,
-                2
-            ),
+        "total_outflow": round(
+            total_outflow,
+            2
+        ),
 
-        "net_cash_flow":
-            round(
-                net_cash_flow,
-                2
-            ),
+        "net_cash_flow": round(
+            net_cash_flow,
+            2
+        ),
 
         "revenue_volatility":
-            (
-                "High (Irregular SME)"
-                if volatility_ratio > 0.4
-                else "Stable"
-            ),
+            revenue_volatility,
 
         "anomalies":
             anomalies,
@@ -559,26 +475,158 @@ def audit_transactions(
             sorted(
                 recurring,
                 key=lambda x:
-                    x["total_spent"],
+                x["total_spent"],
                 reverse=True
             ),
 
         "category_totals":
-            cat_totals
+            category_totals,
+
+        # IMPORTANT
+        # Used by React Transactions page
+        "transactions":
+            transactions
     }
 
 
 # ============================================================
-# 3. AI FINANCIAL ADVICE
+# LOCAL ADVICE ENGINE
+# ============================================================
+
+def _local_rules_engine(
+    audit_data: dict
+) -> str:
+
+    inflow = audit_data.get(
+        "total_inflow",
+        0
+    )
+
+    outflow = audit_data.get(
+        "total_outflow",
+        0
+    )
+
+    net = audit_data.get(
+        "net_cash_flow",
+        0
+    )
+
+    volatility = audit_data.get(
+        "revenue_volatility",
+        "Unknown"
+    )
+
+    anomalies = audit_data.get(
+        "anomalies",
+        []
+    )
+
+    recurring = audit_data.get(
+        "recurring_charges",
+        []
+    )
+
+    lines = []
+
+    lines.append(
+        "WEALTHBRIDGE FINANCIAL ADVISOR"
+    )
+
+    lines.append("")
+
+    lines.append(
+        f"Recorded inflow: "
+        f"${inflow:,.2f}"
+    )
+
+    lines.append(
+        f"Recorded outflow: "
+        f"${outflow:,.2f}"
+    )
+
+    lines.append(
+        f"Net cash flow: "
+        f"${net:,.2f}"
+    )
+
+    lines.append(
+        f"Revenue volatility: "
+        f"{volatility}"
+    )
+
+    if anomalies:
+
+        lines.append("")
+        lines.append(
+            "UNUSUAL TRANSACTIONS:"
+        )
+
+        for item in anomalies[:5]:
+
+            lines.append(
+                f"- {item['tx_id']} | "
+                f"{item['merchant']} | "
+                f"${item['amount']:,.2f}"
+            )
+
+    if recurring:
+
+        lines.append("")
+        lines.append(
+            "RECURRING EXPENSES:"
+        )
+
+        for item in recurring[:5]:
+
+            lines.append(
+                f"- {item['merchant']} | "
+                f"${item['monthly_avg']:,.2f}/month"
+            )
+
+    lines.append("")
+    lines.append("RECOMMENDED ACTIONS:")
+
+    if net < 0:
+
+        lines.append(
+            "1. Review major operating expenses."
+        )
+
+        lines.append(
+            "2. Review recurring subscriptions."
+        )
+
+        lines.append(
+            "3. Protect short-term cash reserves."
+        )
+
+    else:
+
+        lines.append(
+            "1. Review unusual transactions."
+        )
+
+        lines.append(
+            "2. Review recurring expenses "
+            "for possible savings."
+        )
+
+        lines.append(
+            "3. Monitor revenue volatility."
+        )
+
+    return "\n".join(lines)
+
+
+# ============================================================
+# AI ADVICE
 # ============================================================
 
 def synthesize_advice(
     audit_data: dict,
     api_key: str = None
 ) -> str:
-
-    # IMPORTANT:
-    # API key is NOT stored directly in this file.
 
     resolved_key = (
         api_key
@@ -588,247 +636,65 @@ def synthesize_advice(
     )
 
     prompt = f"""
-You are a senior SME CFO.
+You are a senior SME financial advisor.
 
-Analyze this audited client
-transaction ledger:
+Analyze this audited business data:
 
-{json.dumps(
-    audit_data,
-    indent=2
-)}
+{json.dumps(audit_data, indent=2)}
 
-TASK:
+Create a practical financial action plan.
 
-Write an actionable financial
-action plan.
+Rules:
 
-RULES:
-
-1. Cite transaction IDs.
-2. Include exact dollar amounts.
+1. Cite transaction IDs when discussing transactions.
+2. Include exact amounts.
 3. Discuss revenue volatility.
 4. Identify unusual spending.
 5. Identify recurring expenses.
-6. Give practical cost-saving actions.
-7. Avoid unsupported claims.
-8. Base every recommendation
-   on the supplied ledger.
+6. Suggest practical cost-saving actions.
+7. Do not invent financial information.
+8. Keep the answer easy to understand.
 """
 
-    # --------------------------------------------------------
-    # OpenAI
-    # --------------------------------------------------------
+    if not resolved_key:
 
-    if resolved_key:
+        return _local_rules_engine(
+            audit_data
+        )
 
-        try:
+    try:
 
-            from openai import OpenAI
+        from openai import OpenAI
 
-            client = OpenAI(
-                api_key=resolved_key
+        client = OpenAI(
+            api_key=resolved_key
+        )
+
+        response = (
+            client.chat.completions.create(
+
+                model="gpt-4o-mini",
+
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+
+                temperature=0.2
             )
-
-            response = (
-                client.chat.completions.create(
-                    model="gpt-4o-mini",
-
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": prompt
-                        }
-                    ],
-
-                    temperature=0.2
-                )
-            )
-
-            return (
-                response
-                .choices[0]
-                .message
-                .content
-            )
-
-        except Exception as e:
-
-            return (
-                "AI API failed.\n\n"
-                f"{e}\n\n"
-                + _local_rules_engine(
-                    audit_data
-                )
-            )
-
-    # --------------------------------------------------------
-    # No API key
-    # --------------------------------------------------------
-
-    return _local_rules_engine(
-        audit_data
-    )
-
-
-# ============================================================
-# 4. LOCAL FINANCIAL RULES ENGINE
-# ============================================================
-
-def _local_rules_engine(
-    data: dict
-) -> str:
-
-    anomalies = data.get(
-        "anomalies",
-        []
-    )
-
-    recurring = data.get(
-        "recurring_charges",
-        []
-    )
-
-    if anomalies:
-
-        anomaly_text = "\n".join(
-            [
-                (
-                    f"- [{a['tx_id']}] "
-                    f"{a['merchant']} "
-                    f"(${a['amount']:,.2f}) "
-                    f"at {a['category']}"
-                )
-
-                for a in anomalies[:5]
-            ]
         )
 
-    else:
-
-        anomaly_text = (
-            "- No major anomalies detected."
+        return (
+            response
+            .choices[0]
+            .message
+            .content
         )
 
-    if recurring:
+    except Exception:
 
-        recurring_text = "\n".join(
-            [
-                (
-                    f"- [{r['sample_tx_id']}] "
-                    f"{r['merchant']}: "
-                    f"${r['monthly_avg']:,.2f}/month"
-                )
-
-                for r in recurring[:5]
-            ]
+        return _local_rules_engine(
+            audit_data
         )
-
-    else:
-
-        recurring_text = (
-            "- No recurring charges detected."
-        )
-
-    # --------------------------------------------------------
-    # Top recurring expense
-    # --------------------------------------------------------
-
-    if recurring:
-
-        top = recurring[0]
-
-        top_recurring = (
-            f"{top['merchant']} "
-            f"([{top['sample_tx_id']}]) "
-            f"approximately "
-            f"${top['monthly_avg']:,.2f}/month"
-        )
-
-    else:
-
-        top_recurring = "None identified"
-
-    # --------------------------------------------------------
-    # Liquidity buffer
-    # --------------------------------------------------------
-
-    buffer_amount = min(
-        data["total_outflow"] * 0.30,
-        15000.0
-    )
-
-    return f"""
-# Grounded Financial Plan
-
-## 1. Cash Flow
-
-Total recorded inflow:
-
-${data['total_inflow']:,.2f}
-
-Total recorded outflow:
-
-${data['total_outflow']:,.2f}
-
-Net cash flow:
-
-${data['net_cash_flow']:,.2f}
-
-Revenue volatility:
-
-{data['revenue_volatility']}
-
----
-
-## 2. Spending Anomalies
-
-The following transactions require
-review:
-
-{anomaly_text}
-
----
-
-## 3. Recurring Costs
-
-{recurring_text}
-
-Top recurring commitment:
-
-{top_recurring}
-
----
-
-## 4. Recommended Actions
-
-1. Review the flagged anomaly
-   transactions and verify their
-   invoices or contracts.
-
-2. Review recurring commitments,
-   particularly the highest recurring
-   merchant identified above.
-
-3. Because revenue is
-   {data['revenue_volatility'].lower()},
-   maintain a liquidity buffer of
-   approximately
-   ${buffer_amount:,.2f}.
-
-4. Compare SaaS and contractor
-   spending against actual business
-   usage before reducing expenses.
-
-5. Continue monitoring unusual
-   transaction amounts each month.
-
----
-
-## 5. Evidence
-
-This plan is based on the
-transaction IDs and financial
-figures contained in the
-audited ledger.
-"""

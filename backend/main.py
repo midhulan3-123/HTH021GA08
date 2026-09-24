@@ -1,20 +1,44 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+import os
+import io
+import json
+import base64
+import tempfile
+
+import pandas as pd
+
+from fastapi import (
+    FastAPI,
+    UploadFile,
+    File,
+    HTTPException
+)
+
 from fastapi.middleware.cors import CORSMiddleware
+
 from pydantic import BaseModel
 from typing import Optional
-import pandas as pd
-import io
+
+from dotenv import load_dotenv
 
 from engine import (
     generate_synthetic_transactions,
+    normalize_dataframe,
     audit_transactions,
     synthesize_advice
 )
 
+load_dotenv()
+
+
+# ============================================================
+# APP
+# ============================================================
+
 app = FastAPI(
     title="WealthBridge Financial Intelligence API",
-    version="1.0.0"
+    version="2.0.0"
 )
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -24,250 +48,66 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Default demo data
-current_df = generate_synthetic_transactions(800)
 
+# ============================================================
+# DATA
+# ============================================================
+
+current_df = generate_synthetic_transactions(
+    800
+)
+
+
+# ============================================================
+# REQUEST MODELS
+# ============================================================
 
 class AdviceRequest(BaseModel):
+
     api_key: Optional[str] = None
 
 
 class WhatIfRequest(BaseModel):
+
     saas_reduction_pct: float
     contractor_reduction_pct: float
 
 
-def normalize_uploaded_csv(df: pd.DataFrame) -> pd.DataFrame:
+class TranslateRequest(BaseModel):
 
-    # Clean column names
-    df.columns = [
-        str(col).strip().lower().replace(" ", "_")
-        for col in df.columns
-    ]
-
-    # Possible column names
-    aliases = {
-        "transaction_id": "tx_id",
-        "id": "tx_id",
-        "transaction": "tx_id",
-
-        "transaction_date": "date",
-        "timestamp": "date",
-
-        "description": "merchant",
-        "vendor": "merchant",
-        "payee": "merchant",
-
-        "type": "type",
-
-        "value": "amount",
-        "price": "amount",
-        "transaction_amount": "amount"
-    }
-
-    df = df.rename(columns=aliases)
-
-    required = ["date", "amount", "merchant", "category"]
-
-    missing = [
-        column for column in required
-        if column not in df.columns
-    ]
-
-    if missing:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Missing columns: "
-                + ", ".join(missing)
-                + ". Required columns are: "
-                + ", ".join(required)
-            )
-        )
-
-    # Create transaction ID if missing
-    if "tx_id" not in df.columns:
-        df["tx_id"] = [
-            f"UPLOAD-{i + 1:04d}"
-            for i in range(len(df))
-        ]
-
-    # Convert amount
-    df["amount"] = (
-        df["amount"]
-        .astype(str)
-        .str.replace("$", "", regex=False)
-        .str.replace(",", "", regex=False)
-        .str.strip()
-    )
-
-    df["amount"] = pd.to_numeric(
-        df["amount"],
-        errors="coerce"
-    )
-
-    df = df.dropna(
-        subset=["amount"]
-    )
-
-    # Convert dates
-    df["date"] = pd.to_datetime(
-        df["date"],
-        errors="coerce"
-    )
-
-    df = df.dropna(
-        subset=["date"]
-    )
-
-    df["date"] = (
-        df["date"]
-        .dt.strftime("%Y-%m-%d")
-    )
-
-    # Merchant/category cleanup
-    df["merchant"] = (
-        df["merchant"]
-        .fillna("Unknown")
-        .astype(str)
-    )
-
-    df["category"] = (
-        df["category"]
-        .fillna("Other")
-        .astype(str)
-    )
-
-    # Determine transaction type
-    if "type" not in df.columns:
-
-        df["type"] = df["amount"].apply(
-            lambda x:
-            "CREDIT"
-            if x > 0
-            else "DEBIT"
-        )
-
-    else:
-
-        df["type"] = (
-            df["type"]
-            .fillna("")
-            .astype(str)
-            .str.upper()
-        )
-
-        df.loc[
-            df["type"].isin(["INCOME", "CREDIT", "CR"]),
-            "type"
-        ] = "CREDIT"
-
-        df.loc[
-            df["type"].isin(["EXPENSE", "DEBIT", "DR"]),
-            "type"
-        ] = "DEBIT"
-
-    return df[
-        [
-            "tx_id",
-            "date",
-            "merchant",
-            "category",
-            "amount",
-            "type"
-        ]
-    ].reset_index(drop=True)
+    text: str
+    language: str
 
 
-@app.get("/")
-def root():
-    return {
-        "status": "online",
-        "service": "WealthBridge Financial Intelligence"
-    }
-
+# ============================================================
+# HEALTH
+# ============================================================
 
 @app.get("/api/health")
 def health():
+
     return {
-        "status": "healthy"
+        "status": "online",
+        "service": "WealthBridge",
+        "version": "2.0.0"
     }
 
 
+# ============================================================
+# TRANSACTIONS
+# ============================================================
+
 @app.get("/api/transactions")
 def get_transactions():
+
     return current_df.to_dict(
         orient="records"
     )
 
 
-@app.post("/api/upload")
-async def upload_csv(
-    file: UploadFile = File(...)
-):
-
-    global current_df
-
-    if not file.filename.lower().endswith(".csv"):
-        raise HTTPException(
-            status_code=400,
-            detail="Please upload a CSV file."
-        )
-
-    try:
-
-        content = await file.read()
-
-        if len(content) > 10 * 1024 * 1024:
-            raise HTTPException(
-                status_code=400,
-                detail="File must be smaller than 10 MB."
-            )
-
-        uploaded_df = pd.read_csv(
-            io.BytesIO(content)
-        )
-
-        current_df = normalize_uploaded_csv(
-            uploaded_df
-        )
-
-        audit = audit_transactions(
-            current_df
-        )
-
-        return {
-            "status": "success",
-            "filename": file.filename,
-            "rows": len(current_df),
-            "audit": audit
-        }
-
-    except HTTPException:
-        raise
-
-    except Exception as e:
-
-        raise HTTPException(
-            status_code=400,
-            detail=f"Could not process CSV: {str(e)}"
-        )
-
-
-@app.post("/api/regenerate")
-def regenerate_data(rows: int = 800):
-
-    global current_df
-
-    current_df = generate_synthetic_transactions(
-        rows
-    )
-
-    return {
-        "status": "success",
-        "count": len(current_df)
-    }
-
+# ============================================================
+# AUDIT
+# ============================================================
 
 @app.get("/api/audit")
 def get_audit():
@@ -277,59 +117,499 @@ def get_audit():
     )
 
 
+# ============================================================
+# CSV UPLOAD
+# ============================================================
+
+@app.post("/api/upload-csv")
+async def upload_csv(
+    file: UploadFile = File(...)
+):
+
+    global current_df
+
+    filename = (
+        file.filename or ""
+    ).lower()
+
+    if not filename.endswith(".csv"):
+
+        raise HTTPException(
+            status_code=400,
+            detail="Please upload a CSV file."
+        )
+
+    contents = await file.read()
+
+    if len(contents) > 10 * 1024 * 1024:
+
+        raise HTTPException(
+            status_code=400,
+            detail="File exceeds 10 MB."
+        )
+
+    try:
+
+        df = pd.read_csv(
+            io.BytesIO(contents)
+        )
+
+        current_df = normalize_dataframe(
+            df
+        )
+
+        audit = audit_transactions(
+            current_df
+        )
+
+        return {
+            "status": "success",
+            "source": "csv",
+            "filename": file.filename,
+            "count": len(current_df),
+            "audit": audit
+        }
+
+    except Exception as error:
+
+        raise HTTPException(
+            status_code=400,
+            detail=f"CSV processing failed: {error}"
+        )
+
+
+# ============================================================
+# IMAGE UPLOAD
+# ============================================================
+
+@app.post("/api/upload-image")
+async def upload_image(
+    file: UploadFile = File(...)
+):
+
+    global current_df
+
+    api_key = os.getenv(
+        "OPENAI_API_KEY"
+    )
+
+    if not api_key:
+
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "OPENAI_API_KEY is missing "
+                "from backend/.env"
+            )
+        )
+
+    allowed = [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+    ]
+
+    if file.content_type not in allowed:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Use JPG, PNG or WEBP."
+        )
+
+    contents = await file.read()
+
+    if len(contents) > 10 * 1024 * 1024:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Image exceeds 10 MB."
+        )
+
+    try:
+
+        from openai import OpenAI
+
+        client = OpenAI(
+            api_key=api_key
+        )
+
+        encoded = base64.b64encode(
+            contents
+        ).decode("utf-8")
+
+        mime = file.content_type
+
+        prompt = """
+Extract financial transactions from this image.
+
+The image may contain a bank statement,
+invoice, receipt or ledger.
+
+Return ONLY valid JSON.
+
+Format:
+
+{
+  "transactions": [
+    {
+      "date": "YYYY-MM-DD",
+      "merchant": "merchant name",
+      "category": "category",
+      "amount": -100.00,
+      "type": "DEBIT"
+    }
+  ]
+}
+
+Rules:
+
+- Expenses must be negative.
+- Income must be positive.
+- Do not invent missing values.
+- Use "Other" when category is unclear.
+"""
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": prompt
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": (
+                                    f"data:{mime};"
+                                    f"base64,{encoded}"
+                                )
+                            }
+                        }
+                    ]
+                }
+            ],
+            temperature=0
+        )
+
+        text = (
+            response.choices[0]
+            .message
+            .content
+        )
+
+        text = text.replace(
+            "```json",
+            ""
+        ).replace(
+            "```",
+            ""
+        ).strip()
+
+        extracted = json.loads(
+            text
+        )
+
+        transactions = extracted.get(
+            "transactions",
+            []
+        )
+
+        if not transactions:
+
+            raise ValueError(
+                "No transactions found in image."
+            )
+
+        df = pd.DataFrame(
+            transactions
+        )
+
+        current_df = normalize_dataframe(
+            df
+        )
+
+        audit = audit_transactions(
+            current_df
+        )
+
+        return {
+            "status": "success",
+            "source": "image",
+            "filename": file.filename,
+            "count": len(current_df),
+            "audit": audit
+        }
+
+    except Exception as error:
+
+        raise HTTPException(
+            status_code=400,
+            detail=f"Image processing failed: {error}"
+        )
+
+
+# ============================================================
+# AUDIO / VOICE UPLOAD
+# ============================================================
+
+@app.post("/api/upload-audio")
+async def upload_audio(
+    file: UploadFile = File(...)
+):
+
+    global current_df
+
+    api_key = os.getenv(
+        "OPENAI_API_KEY"
+    )
+
+    if not api_key:
+
+        raise HTTPException(
+            status_code=500,
+            detail="OPENAI_API_KEY missing."
+        )
+
+    allowed_extensions = [
+        ".mp3",
+        ".wav",
+        ".m4a",
+        ".webm",
+        ".mp4",
+        ".mpeg"
+    ]
+
+    filename = (
+        file.filename or ""
+    ).lower()
+
+    if not any(
+        filename.endswith(ext)
+        for ext in allowed_extensions
+    ):
+
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Use MP3, WAV, M4A, WEBM or MPEG audio."
+            )
+        )
+
+    contents = await file.read()
+
+    if len(contents) > 25 * 1024 * 1024:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Audio exceeds 25 MB."
+        )
+
+    try:
+
+        from openai import OpenAI
+
+        client = OpenAI(
+            api_key=api_key
+        )
+
+        suffix = os.path.splitext(
+            filename
+        )[1] or ".mp3"
+
+        with tempfile.NamedTemporaryFile(
+            suffix=suffix,
+            delete=False
+        ) as temp:
+
+            temp.write(contents)
+            temp_path = temp.name
+
+        try:
+
+            with open(
+                temp_path,
+                "rb"
+            ) as audio_file:
+
+                transcript = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file
+                )
+
+            spoken_text = transcript.text
+
+        finally:
+
+            if os.path.exists(
+                temp_path
+            ):
+                os.remove(
+                    temp_path
+                )
+
+        extraction_prompt = f"""
+Convert this spoken financial information
+into transaction records.
+
+Spoken information:
+
+{spoken_text}
+
+Return ONLY valid JSON:
+
+{{
+  "transactions": [
+    {{
+      "date": "YYYY-MM-DD",
+      "merchant": "merchant",
+      "category": "category",
+      "amount": -100.00,
+      "type": "DEBIT"
+    }}
+  ]
+}}
+
+Rules:
+- Expenses are negative.
+- Revenue is positive.
+- Do not invent information.
+- If date is not spoken, use today's date.
+- Use "Other" when category is unclear.
+"""
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "user",
+                    "content": extraction_prompt
+                }
+            ],
+            temperature=0
+        )
+
+        text = (
+            response.choices[0]
+            .message
+            .content
+        )
+
+        text = text.replace(
+            "```json",
+            ""
+        ).replace(
+            "```",
+            ""
+        ).strip()
+
+        extracted = json.loads(
+            text
+        )
+
+        df = pd.DataFrame(
+            extracted.get(
+                "transactions",
+                []
+            )
+        )
+
+        if df.empty:
+
+            raise ValueError(
+                "No financial transactions found in voice."
+            )
+
+        current_df = normalize_dataframe(
+            df
+        )
+
+        audit = audit_transactions(
+            current_df
+        )
+
+        return {
+            "status": "success",
+            "source": "voice",
+            "filename": file.filename,
+            "transcript": spoken_text,
+            "count": len(current_df),
+            "audit": audit
+        }
+
+    except Exception as error:
+
+        raise HTTPException(
+            status_code=400,
+            detail=f"Voice processing failed: {error}"
+        )
+
+
+# ============================================================
+# AI ADVICE
+# ============================================================
+
 @app.post("/api/generate-plan")
-def get_plan(
+def generate_plan(
     req: AdviceRequest
 ):
 
-    audit_data = audit_transactions(
+    audit = audit_transactions(
         current_df
     )
 
-    plan_text = synthesize_advice(
-        audit_data,
-        api_key=req.api_key
+    plan = synthesize_advice(
+        audit,
+        req.api_key
     )
 
     return {
-        "plan": plan_text
+        "plan": plan
     }
 
 
+# ============================================================
+# WHAT IF
+# ============================================================
+
 @app.post("/api/what-if")
-def simulate(
+def what_if(
     req: WhatIfRequest
 ):
 
-    audit_data = audit_transactions(
+    audit = audit_transactions(
         current_df
     )
 
-    saas_total = audit_data[
+    saas = audit[
         "category_totals"
     ].get(
         "Software/SaaS",
-        0.0
+        0
     )
 
-    contractor_total = audit_data[
+    contractors = audit[
         "category_totals"
     ].get(
         "Contractors",
-        0.0
+        0
     )
 
     savings = (
-        saas_total *
-        (req.saas_reduction_pct / 100)
+        saas *
+        req.saas_reduction_pct /
+        100
     ) + (
-        contractor_total *
-        (req.contractor_reduction_pct / 100)
+        contractors *
+        req.contractor_reduction_pct /
+        100
     )
 
-    adjusted_net = (
-        audit_data["net_cash_flow"]
-        + savings
+    adjusted = (
+        audit["net_cash_flow"] +
+        savings
     )
 
     return {
@@ -337,15 +617,113 @@ def simulate(
             savings,
             2
         ),
-        "original_net": audit_data[
+        "original_net": audit[
             "net_cash_flow"
         ],
         "adjusted_net": round(
-            adjusted_net,
+            adjusted,
             2
         )
     }
 
+
+# ============================================================
+# TRANSLATION
+# ============================================================
+
+@app.post("/api/translate")
+def translate(
+    req: TranslateRequest
+):
+
+    api_key = os.getenv(
+        "OPENAI_API_KEY"
+    )
+
+    if not api_key:
+
+        return {
+            "translation": req.text
+        }
+
+    try:
+
+        from openai import OpenAI
+
+        client = OpenAI(
+            api_key=api_key
+        )
+
+        prompt = f"""
+Translate the following financial report
+into {req.language}.
+
+Keep:
+- transaction IDs
+- dollar amounts
+- headings
+- numbers
+- financial meaning
+
+Do not add information.
+
+Text:
+
+{req.text}
+"""
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0
+        )
+
+        return {
+            "translation": (
+                response.choices[0]
+                .message
+                .content
+            )
+        }
+
+    except Exception:
+
+        return {
+            "translation": req.text
+        }
+
+
+# ============================================================
+# REGENERATE DEMO
+# ============================================================
+
+@app.post("/api/regenerate")
+def regenerate(
+    rows: int = 800
+):
+
+    global current_df
+
+    current_df = (
+        generate_synthetic_transactions(
+            rows
+        )
+    )
+
+    return {
+        "status": "success",
+        "count": len(current_df)
+    }
+
+
+# ============================================================
+# RUN
+# ============================================================
 
 if __name__ == "__main__":
 

@@ -1,12 +1,20 @@
 import React, {
   useEffect,
+  useRef,
   useState
 } from "react";
 
-import "./index.css";
-
-const BACKEND_URL =
+const API =
   "http://127.0.0.1:8000";
+
+const languages = [
+  "English",
+  "Tamil",
+  "Hindi",
+  "Telugu",
+  "Malayalam",
+  "Kannada"
+];
 
 function money(value) {
   return new Intl.NumberFormat(
@@ -21,30 +29,38 @@ function money(value) {
 
 export default function App() {
 
-  const [audit, setAudit] = useState(null);
-  const [file, setFile] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [audit, setAudit] =
+    useState(null);
 
-  const [advice, setAdvice] =
+  const [plan, setPlan] =
     useState("");
 
-  const [adviceLoading, setAdviceLoading] =
+  const [loading, setLoading] =
     useState(false);
 
-  const [saasCut, setSaasCut] =
+  const [uploading, setUploading] =
+    useState(false);
+
+  const [fileName, setFileName] =
+    useState("");
+
+  const [source, setSource] =
+    useState("");
+
+  const [language, setLanguage] =
+    useState("English");
+
+  const [saas, setSaas] =
     useState(15);
 
-  const [contractorCut, setContractorCut] =
+  const [contractor, setContractor] =
     useState(10);
 
   const [simulation, setSimulation] =
     useState(null);
 
-  const [language, setLanguage] =
-    useState("English");
-
-  const [activePage, setActivePage] =
-    useState("Overview");
+  const fileInput =
+    useRef(null);
 
   useEffect(() => {
     loadAudit();
@@ -56,7 +72,7 @@ export default function App() {
 
       const response =
         await fetch(
-          `${BACKEND_URL}/api/audit`
+          `${API}/api/audit`
         );
 
       const data =
@@ -71,35 +87,92 @@ export default function App() {
 
     } catch (error) {
 
-      console.error(
-        "Backend connection failed:",
-        error
-      );
+      console.error(error);
     }
   }
 
-  async function uploadFile() {
-
-    if (!file) {
-      alert("Please select a CSV file first.");
-      return;
-    }
-
-    setLoading(true);
+  async function runSimulation(
+    saasValue,
+    contractorValue
+  ) {
 
     try {
 
-      const formData =
-        new FormData();
+      const response =
+        await fetch(
+          `${API}/api/what-if`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json"
+            },
+            body: JSON.stringify({
+              saas_reduction_pct:
+                Number(saasValue),
 
-      formData.append(
-        "file",
-        file
-      );
+              contractor_reduction_pct:
+                Number(contractorValue)
+            })
+          }
+        );
+
+      const data =
+        await response.json();
+
+      setSimulation(data);
+
+    } catch (error) {
+
+      console.error(error);
+    }
+  }
+
+  async function uploadFile(file) {
+
+    if (!file) return;
+
+    setUploading(true);
+
+    setFileName(
+      file.name
+    );
+
+    const formData =
+      new FormData();
+
+    formData.append(
+      "file",
+      file
+    );
+
+    let endpoint =
+      "/api/upload-csv";
+
+    if (
+      file.type.startsWith(
+        "image/"
+      )
+    ) {
+      endpoint =
+        "/api/upload-image";
+    } else if (
+      file.type.startsWith(
+        "audio/"
+      ) ||
+      /\.(mp3|wav|m4a|webm|mpeg)$/i.test(
+        file.name
+      )
+    ) {
+      endpoint =
+        "/api/upload-audio";
+    }
+
+    try {
 
       const response =
         await fetch(
-          `${BACKEND_URL}/api/upload`,
+          `${API}${endpoint}`,
           {
             method: "POST",
             body: formData
@@ -116,105 +189,47 @@ export default function App() {
         );
       }
 
-      setAudit(data.audit);
-
-      await runSimulation(
-        saasCut,
-        contractorCut
+      setAudit(
+        data.audit
       );
 
-      alert(
-        `Successfully analyzed ${data.rows} transactions`
+      setSource(
+        data.source
+      );
+
+      setPlan("");
+
+      await runSimulation(
+        saas,
+        contractor
       );
 
     } catch (error) {
 
       alert(
-        `Upload error: ${error.message}`
+        error.message
       );
 
     } finally {
 
-      setLoading(false);
+      setUploading(false);
     }
   }
 
-  async function useDemoData() {
+  function chooseFile() {
+
+    fileInput.current?.click();
+  }
+
+  async function generateAdvice() {
 
     setLoading(true);
 
     try {
 
-      await fetch(
-        `${BACKEND_URL}/api/regenerate`,
-        {
-          method: "POST"
-        }
-      );
-
-      await loadAudit();
-
-    } catch (error) {
-
-      alert(
-        "Could not load demo data."
-      );
-
-    } finally {
-
-      setLoading(false);
-    }
-  }
-
-  async function runSimulation(
-    saas,
-    contractor
-  ) {
-
-    try {
-
       const response =
         await fetch(
-          `${BACKEND_URL}/api/what-if`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type":
-                "application/json"
-            },
-            body: JSON.stringify({
-              saas_reduction_pct:
-                Number(saas),
-
-              contractor_reduction_pct:
-                Number(contractor)
-            })
-          }
-        );
-
-      const data =
-        await response.json();
-
-      setSimulation(data);
-
-    } catch (error) {
-
-      console.error(
-        "Simulation error:",
-        error
-      );
-    }
-  }
-
-  async function generateAdvice() {
-
-    setAdviceLoading(true);
-
-    try {
-
-      const response =
-        await fetch(
-          `${BACKEND_URL}/api/generate-plan`,
+          `${API}/api/generate-plan`,
           {
             method: "POST",
             headers: {
@@ -230,163 +245,112 @@ export default function App() {
       const data =
         await response.json();
 
-      setAdvice(
-        data.plan ||
-        "No advice generated."
+      setPlan(
+        data.plan || ""
       );
 
     } catch (error) {
 
-      setAdvice(
-        "Unable to generate advice. Check the backend."
+      alert(
+        "Could not generate advice."
       );
 
     } finally {
 
-      setAdviceLoading(false);
+      setLoading(false);
     }
   }
 
-  function handleSaasChange(e) {
+  async function translatePlan() {
 
-    const value =
-      Number(e.target.value);
+    if (!plan) return;
 
-    setSaasCut(value);
-
-    runSimulation(
-      value,
-      contractorCut
-    );
-  }
-
-  function handleContractorChange(e) {
-
-    const value =
-      Number(e.target.value);
-
-    setContractorCut(value);
-
-    runSimulation(
-      saasCut,
-      value
-    );
-  }
-
-  const translations = {
-
-    English: {
-      overview: "Overview",
-      transactions: "Transactions",
-      cashflow: "Cash Flow",
-      advisor: "AI Advisor",
-      whatif: "What-If",
-      import: "IMPORT YOUR BUSINESS LEDGER",
-      analyze: "ANALYZE DATA",
-      inflow: "INFLOW",
-      outflow: "OUTFLOW",
-      net: "NET CASH",
-      risk: "RISK",
-      anomalies: "SPENDING ANOMALIES",
-      recurring: "RECURRING COSTS",
-      lab: "WHAT-IF FINANCE LAB",
-      advisorTitle:
-        "AI FINANCIAL ADVISOR",
-      generate:
-        "GENERATE ADVICE"
-    },
-
-    Tamil: {
-      overview: "மேலோட்டம்",
-      transactions: "பரிவர்த்தனைகள்",
-      cashflow: "பணப்புழக்கம்",
-      advisor: "AI ஆலோசகர்",
-      whatif: "என்ன ஆகும்?",
-      import: "வணிக CSV கோப்பை பதிவேற்றவும்",
-      analyze: "தரவை பகுப்பாய்வு செய்",
-      inflow: "வரவு",
-      outflow: "செலவு",
-      net: "நிகர பணம்",
-      risk: "ஆபத்து",
-      anomalies: "அசாதாரண செலவுகள்",
-      recurring: "தொடர்ச்சியான செலவுகள்",
-      lab: "WHAT-IF நிதி ஆய்வகம்",
-      advisorTitle: "AI நிதி ஆலோசகர்",
-      generate: "ஆலோசனையை உருவாக்கு"
-    },
-
-    Hindi: {
-      overview: "अवलोकन",
-      transactions: "लेनदेन",
-      cashflow: "कैश फ्लो",
-      advisor: "AI सलाहकार",
-      whatif: "क्या होगा?",
-      import: "व्यवसाय CSV अपलोड करें",
-      analyze: "डेटा विश्लेषण करें",
-      inflow: "आमदनी",
-      outflow: "खर्च",
-      net: "शुद्ध नकदी",
-      risk: "जोखिम",
-      anomalies: "असामान्य खर्च",
-      recurring: "बार-बार होने वाले खर्च",
-      lab: "WHAT-IF वित्त प्रयोगशाला",
-      advisorTitle: "AI वित्तीय सलाहकार",
-      generate: "सलाह तैयार करें"
-    },
-
-    Telugu: {
-      overview: "అవలోకనం",
-      transactions: "లావాదేవీలు",
-      cashflow: "క్యాష్ ఫ్లో",
-      advisor: "AI సలహాదారు",
-      whatif: "ఏమైతే?",
-      import: "వ్యాపార CSV అప్లోడ్ చేయండి",
-      analyze: "డేటాను విశ్లేషించండి",
-      inflow: "ఆదాయం",
-      outflow: "ఖర్చు",
-      net: "నికర నగదు",
-      risk: "ప్రమాదం",
-      anomalies: "అసాధారణ ఖర్చులు",
-      recurring: "పునరావృత ఖర్చులు",
-      lab: "WHAT-IF ఆర్థిక ప్రయోగశాల",
-      advisorTitle: "AI ఆర్థిక సలహాదారు",
-      generate: "సలహా రూపొందించండి"
+    if (language === "English") {
+      return;
     }
-  };
 
-  const t =
-    translations[language] ||
-    translations.English;
+    try {
 
-  if (!audit) {
+      const response =
+        await fetch(
+          `${API}/api/translate`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json"
+            },
+            body: JSON.stringify({
+              text: plan,
+              language
+            })
+          }
+        );
 
-    return (
-      <div className="loading-screen">
-        <div className="loading-logo">
-          W
-        </div>
+      const data =
+        await response.json();
 
-        <h1>
-          WealthBridge
-        </h1>
+      setPlan(
+        data.translation
+      );
 
-        <p>
-          Loading Financial Intelligence...
-        </p>
-      </div>
+    } catch (error) {
+
+      alert(
+        "Translation failed."
+      );
+    }
+  }
+
+  function speakPlan() {
+
+    if (!plan) return;
+
+    window.speechSynthesis.cancel();
+
+    const utterance =
+      new SpeechSynthesisUtterance(
+        plan
+      );
+
+    utterance.rate = 0.9;
+
+    window.speechSynthesis.speak(
+      utterance
     );
   }
 
-  const risk =
-    audit.revenue_volatility
-      ?.toLowerCase()
-      .includes("high")
-      ? "HIGH"
-      : "STABLE";
+  function handleSliderChange(
+    type,
+    value
+  ) {
+
+    const numeric =
+      Number(value);
+
+    if (type === "saas") {
+      setSaas(numeric);
+      runSimulation(
+        numeric,
+        contractor
+      );
+    } else {
+      setContractor(numeric);
+      runSimulation(
+        saas,
+        numeric
+      );
+    }
+  }
+
+  const anomalies =
+    audit?.anomalies || [];
+
+  const recurring =
+    audit?.recurring_charges || [];
 
   return (
-
-    <div className="app-shell">
+    <div className="app">
 
       {/* SIDEBAR */}
 
@@ -399,104 +363,65 @@ export default function App() {
           </div>
 
           <div>
-            <h2>
+            <strong>
               WealthBridge
-            </h2>
+            </strong>
 
             <span>
-              FINANCIAL OS
+              FINANCIAL INTELLIGENCE
             </span>
           </div>
 
         </div>
 
-        <div className="online">
+        <div className="side-status">
           <span></span>
           AI ENGINE ONLINE
         </div>
 
         <nav>
 
-          <button
-            className={
-              activePage === "Overview"
-                ? "nav-active"
-                : ""
-            }
-            onClick={() =>
-              setActivePage("Overview")
-            }
-          >
-            ◈ {t.overview}
-          </button>
+          <div className="nav-item active">
+            <b>◈</b>
+            Overview
+          </div>
 
-          <button
-            className={
-              activePage === "Transactions"
-                ? "nav-active"
-                : ""
-            }
-            onClick={() =>
-              setActivePage("Transactions")
-            }
-          >
-            ◫ {t.transactions}
-          </button>
+          <div className="nav-item">
+            <b>◫</b>
+            Transactions
+          </div>
 
-          <button
-            className={
-              activePage === "Cash Flow"
-                ? "nav-active"
-                : ""
-            }
-            onClick={() =>
-              setActivePage("Cash Flow")
-            }
-          >
-            ◉ {t.cashflow}
-          </button>
+          <div className="nav-item">
+            <b>◉</b>
+            Cash Flow
+          </div>
 
-          <button
-            className={
-              activePage === "AI Advisor"
-                ? "nav-active"
-                : ""
-            }
-            onClick={() =>
-              setActivePage("AI Advisor")
-            }
-          >
-            ◇ {t.advisor}
-          </button>
+          <div className="nav-item">
+            <b>◇</b>
+            AI Advisor
+          </div>
 
-          <button
-            className={
-              activePage === "What-If"
-                ? "nav-active"
-                : ""
-            }
-            onClick={() =>
-              setActivePage("What-If")
-            }
-          >
-            ◎ {t.whatif}
-          </button>
+          <div className="nav-item">
+            <b>◎</b>
+            What-If Lab
+          </div>
 
         </nav>
 
         <div className="sidebar-bottom">
 
-          <div className="secure">
-            🔒 Secure workspace
+          <div>
+            WEALTHBRIDGE
           </div>
 
           <small>
-            WealthBridge v1.0
+            SME COMMAND CENTER
           </small>
 
         </div>
 
       </aside>
+
 
       {/* MAIN */}
 
@@ -505,15 +430,13 @@ export default function App() {
         <header className="topbar">
 
           <div>
-
-            <div className="eyebrow">
-              FINANCIAL INTELLIGENCE
-            </div>
+            <span className="eyebrow">
+              BUSINESS COMMAND CENTER
+            </span>
 
             <h1>
-              Business Command Center
+              Financial Intelligence
             </h1>
-
           </div>
 
           <div className="top-actions">
@@ -526,13 +449,20 @@ export default function App() {
                 )
               }
             >
-              <option>English</option>
-              <option>Tamil</option>
-              <option>Hindi</option>
-              <option>Telugu</option>
+
+              {languages.map(
+                (item) => (
+                  <option
+                    key={item}
+                  >
+                    {item}
+                  </option>
+                )
+              )}
+
             </select>
 
-            <div className="status">
+            <div className="online">
               <span></span>
               AI ONLINE
             </div>
@@ -541,201 +471,210 @@ export default function App() {
 
         </header>
 
-        {/* UPLOAD */}
 
-        <section className="upload-card">
+        {/* UPLOAD PANEL */}
 
-          <div className="upload-left">
+        <section className="import-panel">
 
-            <div className="upload-icon">
-              ↑
-            </div>
+          <div className="import-copy">
+
+            <span className="number">
+              01
+            </span>
 
             <div>
 
-              <div className="section-label">
-                DATA IMPORT
-              </div>
+              <span className="eyebrow">
+                IMPORT YOUR DATA
+              </span>
 
               <h2>
-                {t.import}
+                Bring your business
+                <br />
+                ledger into focus.
               </h2>
 
               <p>
-                Upload your transaction ledger
-                and let WealthBridge analyze
-                your business.
+                Upload a CSV, receipt,
+                bank statement image,
+                or financial voice note.
               </p>
 
             </div>
 
           </div>
 
-          <div className="upload-actions">
+          <div className="upload-zone">
 
-            <label className="file-button">
-
-              {file
-                ? file.name
-                : "CHOOSE CSV"}
-
-              <input
-                type="file"
-                accept=".csv"
-                onChange={(e) =>
-                  setFile(
-                    e.target.files[0]
-                  )
-                }
-              />
-
-            </label>
-
-            <button
-              className="primary-button"
-              onClick={uploadFile}
-              disabled={loading}
-            >
-              {loading
-                ? "ANALYZING..."
-                : `${t.analyze} →`}
-            </button>
+            <input
+              ref={fileInput}
+              type="file"
+              hidden
+              accept="
+                .csv,
+                image/png,
+                image/jpeg,
+                image/webp,
+                audio/mpeg,
+                audio/wav,
+                audio/mp4,
+                audio/webm,
+                .mp3,
+                .wav,
+                .m4a
+              "
+              onChange={(e) =>
+                uploadFile(
+                  e.target.files[0]
+                )
+              }
+            />
 
             <button
-              className="demo-button"
-              onClick={useDemoData}
+              className="upload-button"
+              onClick={chooseFile}
+              disabled={uploading}
             >
-              USE DEMO DATA
+
+              <span className="upload-icon">
+                ↑
+              </span>
+
+              <span>
+
+                {uploading
+                  ? "PROCESSING..."
+                  : "CHOOSE DATA"}
+
+              </span>
+
             </button>
+
+            <div className="formats">
+
+              CSV
+              <span>•</span>
+              IMAGE
+              <span>•</span>
+              VOICE
+
+            </div>
 
           </div>
 
         </section>
+
+
+        {fileName && (
+
+          <div className="file-status">
+
+            <span>
+              ✓
+            </span>
+
+            <strong>
+              {fileName}
+            </strong>
+
+            <small>
+              {source
+                ? `${source.toUpperCase()} ANALYZED`
+                : "READY"}
+            </small>
+
+          </div>
+
+        )}
+
 
         {/* METRICS */}
 
         <section className="metrics">
 
-          <div className="metric">
+          <Metric
+            label="TOTAL INFLOW"
+            value={money(
+              audit?.total_inflow
+            )}
+            icon="↑"
+          />
 
-            <span>
-              ↑ {t.inflow}
-            </span>
+          <Metric
+            label="TOTAL OUTFLOW"
+            value={money(
+              audit?.total_outflow
+            )}
+            icon="↓"
+          />
 
-            <strong>
-              {money(
-                audit.total_inflow
-              )}
-            </strong>
+          <Metric
+            label="NET CASH FLOW"
+            value={money(
+              audit?.net_cash_flow
+            )}
+            icon="◆"
+          />
 
-            <small>
-              Recorded revenue
-            </small>
-
-          </div>
-
-          <div className="metric">
-
-            <span>
-              ↓ {t.outflow}
-            </span>
-
-            <strong>
-              {money(
-                audit.total_outflow
-              )}
-            </strong>
-
-            <small>
-              Business expenses
-            </small>
-
-          </div>
-
-          <div className="metric">
-
-            <span>
-              ◆ {t.net}
-            </span>
-
-            <strong>
-              {money(
-                audit.net_cash_flow
-              )}
-            </strong>
-
-            <small>
-              Current net position
-            </small>
-
-          </div>
-
-          <div className="metric risk-card">
-
-            <span>
-              ◈ {t.risk}
-            </span>
-
-            <strong>
-              {risk}
-            </strong>
-
-            <small>
-              Revenue volatility
-            </small>
-
-          </div>
+          <Metric
+            label="REVENUE VOLATILITY"
+            value={
+              audit?.revenue_volatility ||
+              "—"
+            }
+            icon="!"
+            risk
+          />
 
         </section>
 
-        {/* ANALYSIS */}
+
+        {/* ANALYSIS GRID */}
 
         <section className="analysis-grid">
-
-          {/* ANOMALIES */}
 
           <div className="panel">
 
             <div className="panel-heading">
 
               <div>
-                <span className="section-label">
-                  MONITOR
+                <span className="eyebrow">
+                  RISK SIGNALS
                 </span>
 
                 <h3>
-                  {t.anomalies}
+                  Spending anomalies
                 </h3>
               </div>
 
               <span className="count">
-                {audit.anomalies.length}
+                {anomalies.length}
               </span>
 
             </div>
 
             <div className="anomaly-list">
 
-              {audit.anomalies.length === 0 ? (
+              {anomalies.length === 0 ? (
 
                 <div className="empty">
-                  No anomalies detected
+                  No statistical anomalies detected.
                 </div>
 
               ) : (
 
-                audit.anomalies
-                  .slice(0, 5)
+                anomalies
+                  .slice(0, 6)
                   .map(
-                    (item, index) => (
+                    (item) => (
 
                       <div
                         className="anomaly"
-                        key={index}
+                        key={item.tx_id}
                       >
 
                         <div className="warning">
-                          ⚠
+                          !
                         </div>
 
                         <div>
@@ -744,9 +683,9 @@ export default function App() {
                             {item.merchant}
                           </strong>
 
-                          <span>
-                            {item.tx_id}
-                          </span>
+                          <small>
+                            [{item.tx_id}]
+                          </small>
 
                         </div>
 
@@ -767,43 +706,34 @@ export default function App() {
 
           </div>
 
-          {/* RECURRING */}
 
           <div className="panel">
 
             <div className="panel-heading">
 
               <div>
-                <span className="section-label">
-                  COMMITMENTS
+                <span className="eyebrow">
+                  FIXED COMMITMENTS
                 </span>
 
                 <h3>
-                  {t.recurring}
+                  Recurring costs
                 </h3>
               </div>
-
-              <span className="count">
-                {audit.recurring_charges.length}
-              </span>
 
             </div>
 
             <div className="recurring-list">
 
-              {audit.recurring_charges
-                .slice(0, 5)
+              {recurring
+                .slice(0, 6)
                 .map(
-                  (item, index) => (
+                  (item) => (
 
                     <div
                       className="recurring"
-                      key={index}
+                      key={item.merchant}
                     >
-
-                      <div className="merchant-icon">
-                        $
-                      </div>
 
                       <div>
 
@@ -811,20 +741,25 @@ export default function App() {
                           {item.merchant}
                         </strong>
 
-                        <span>
+                        <small>
                           {item.category}
-                        </span>
+                        </small>
 
                       </div>
 
-                      <b>
-                        {money(
-                          item.monthly_avg
-                        )}
+                      <div>
+
+                        <b>
+                          {money(
+                            item.monthly_avg
+                          )}
+                        </b>
+
                         <small>
-                          /mo
+                          / MONTH
                         </small>
-                      </b>
+
+                      </div>
 
                     </div>
 
@@ -837,201 +772,214 @@ export default function App() {
 
         </section>
 
+
         {/* WHAT IF */}
 
         <section className="whatif">
 
-          <div className="whatif-header">
+          <div className="section-title">
+
+            <span className="number">
+              02
+            </span>
 
             <div>
 
-              <span className="section-label">
-                SIMULATION ENGINE
+              <span className="eyebrow">
+                SCENARIO SIMULATION
               </span>
 
               <h2>
-                {t.lab}
+                What-If Finance Lab
               </h2>
 
             </div>
-
-            {simulation && (
-
-              <div className="savings">
-
-                <span>
-                  PROJECTED SAVINGS
-                </span>
-
-                <strong>
-                  {money(
-                    simulation.projected_savings
-                  )}
-                </strong>
-
-              </div>
-
-            )}
-
-          </div>
-
-          <div className="sliders">
-
-            <div className="slider-row">
-
-              <div className="slider-info">
-
-                <span>
-                  SaaS reduction
-                </span>
-
-                <b>
-                  {saasCut}%
-                </b>
-
-              </div>
-
-              <input
-                type="range"
-                min="0"
-                max="50"
-                value={saasCut}
-                onChange={
-                  handleSaasChange
-                }
-              />
-
-            </div>
-
-            <div className="slider-row">
-
-              <div className="slider-info">
-
-                <span>
-                  Contractor reduction
-                </span>
-
-                <b>
-                  {contractorCut}%
-                </b>
-
-              </div>
-
-              <input
-                type="range"
-                min="0"
-                max="50"
-                value={contractorCut}
-                onChange={
-                  handleContractorChange
-                }
-              />
-
-            </div>
-
-          </div>
-
-          {simulation && (
 
             <div className="simulation-result">
 
-              <div>
-                Original net
-                <strong>
-                  {money(
-                    simulation.original_net
-                  )}
-                </strong>
-              </div>
-
-              <div>
-                Projected net
-                <strong>
-                  {money(
-                    simulation.adjusted_net
-                  )}
-                </strong>
-              </div>
-
-            </div>
-
-          )}
-
-        </section>
-
-        {/* AI ADVISOR */}
-
-        <section className="advisor-panel">
-
-          <div className="advisor-title">
-
-            <div className="ai-orb">
-              ✦
-            </div>
-
-            <div>
-
-              <span className="section-label">
-                INTELLIGENCE ENGINE
+              <span>
+                PROJECTED SAVINGS
               </span>
 
-              <h2>
-                {t.advisorTitle}
-              </h2>
-
-              <p>
-                Grounded recommendations based
-                on your uploaded transaction data.
-              </p>
+              <strong>
+                {money(
+                  simulation?.projected_savings
+                )}
+              </strong>
 
             </div>
 
           </div>
 
-          <button
-            className="advisor-button"
-            onClick={
-              generateAdvice
-            }
-            disabled={
-              adviceLoading
-            }
-          >
-            {adviceLoading
-              ? "GENERATING..."
-              : `${t.generate} ✦`}
-          </button>
 
-          {advice && (
+          <div className="sliders">
 
-            <div className="advice-output">
+            <Slider
+              label="SaaS reduction"
+              value={saas}
+              onChange={(value) =>
+                handleSliderChange(
+                  "saas",
+                  value
+                )
+              }
+            />
 
-              <div className="advice-label">
-                AI ANALYSIS
+            <Slider
+              label="Contractor reduction"
+              value={contractor}
+              onChange={(value) =>
+                handleSliderChange(
+                  "contractor",
+                  value
+                )
+              }
+            />
+
+          </div>
+
+
+          <div className="scenario-footer">
+
+            <span>
+              Current net
+              <b>
+                {money(
+                  simulation?.original_net
+                )}
+              </b>
+            </span>
+
+            <span>
+              Simulated net
+              <b className="green">
+                {money(
+                  simulation?.adjusted_net
+                )}
+              </b>
+            </span>
+
+          </div>
+
+        </section>
+
+
+        {/* AI ADVISOR */}
+
+        <section className="advisor">
+
+          <div className="advisor-heading">
+
+            <div>
+
+              <span className="number">
+                03
+              </span>
+
+              <span className="eyebrow">
+                AI FINANCIAL ADVISOR
+              </span>
+
+              <h2>
+                Turn the ledger into
+                <br />
+                an action plan.
+              </h2>
+
+            </div>
+
+            <div className="advisor-actions">
+
+              <button
+                className="primary"
+                onClick={
+                  generateAdvice
+                }
+                disabled={loading}
+              >
+
+                {loading
+                  ? "ANALYZING..."
+                  : "GENERATE ADVICE →"}
+
+              </button>
+
+              {plan && (
+
+                <>
+                  <button
+                    className="secondary"
+                    onClick={
+                      translatePlan
+                    }
+                  >
+                    🌐 {language}
+                  </button>
+
+                  <button
+                    className="secondary"
+                    onClick={
+                      speakPlan
+                    }
+                  >
+                    🔊 Listen
+                  </button>
+                </>
+
+              )}
+
+            </div>
+
+          </div>
+
+
+          {plan ? (
+
+            <div className="advice">
+
+              <div className="ai-badge">
+                ✦ AI ANALYSIS
               </div>
 
               <pre>
-                {advice}
+                {plan}
               </pre>
 
             </div>
 
+          ) : (
+
+            <div className="advice-placeholder">
+
+              <span>
+                ✦
+              </span>
+
+              <p>
+                Generate an evidence-based
+                financial action plan from
+                the current ledger.
+              </p>
+
+            </div>
+
           )}
 
         </section>
 
+
         <footer>
 
           <span>
-            © 2026 WealthBridge
+            WEALTHBRIDGE
           </span>
 
           <span>
-            FINANCIAL INTELLIGENCE PLATFORM
+            AI-POWERED SME FINANCIAL INTELLIGENCE
           </span>
 
           <span>
-            SECURE • PRIVATE • AI-POWERED
+            2026
           </span>
 
         </footer>
@@ -1039,5 +987,86 @@ export default function App() {
       </main>
 
     </div>
+  );
+}
+
+
+/* ============================================================
+   COMPONENTS
+============================================================ */
+
+function Metric({
+  label,
+  value,
+  icon,
+  risk
+}) {
+
+  return (
+
+    <div className="metric">
+
+      <div className="metric-icon">
+        {icon}
+      </div>
+
+      <div>
+
+        <span>
+          {label}
+        </span>
+
+        <strong
+          className={
+            risk ? "risk-value" : ""
+          }
+        >
+          {value}
+        </strong>
+
+      </div>
+
+    </div>
+
+  );
+}
+
+
+function Slider({
+  label,
+  value,
+  onChange
+}) {
+
+  return (
+
+    <div className="slider-row">
+
+      <div className="slider-label">
+
+        <span>
+          {label}
+        </span>
+
+        <b>
+          {value}%
+        </b>
+
+      </div>
+
+      <input
+        type="range"
+        min="0"
+        max="50"
+        value={value}
+        onChange={(e) =>
+          onChange(
+            e.target.value
+          )
+        }
+      />
+
+    </div>
+
   );
 }

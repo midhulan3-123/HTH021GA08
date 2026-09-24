@@ -1,0 +1,9 @@
+date,amount,merchant,category
+2026-01-05,12500,Client Alpha,Revenue
+2026-01-07,-450,AWS Cloud,Software/SaaS
+2026-01-10,-800,HubSpot,Software/SaaS
+2026-01-15,-6500,Dev Studio LLC,Contractors
+2026-01-20,-480,Starbucks,Travel & Meals
+2026-02-05,18000,Client Beta,Revenue
+2026-02-08,-450,AWS Cloud,Software/SaaS
+2026-02-12,-800,HubSpot,Software/SaaS
